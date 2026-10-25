@@ -23,7 +23,10 @@ class D103CNOperationModeControlCapability extends OperationModeControlCapabilit
         try {
             await this.robot.refreshControlState({noRetry: false, force: true});
             const readiness = this.robot.getControlReadiness();
-            if (!readiness.ready || ![2, 6, 13, 21].includes(readiness.status) || this.robot.camera.state().running) {
+            // Mode selection is a settings write, not manual driving. A dock's
+            // drying cycle does not prevent preparing the next cleaning mode.
+            if (readiness.fault !== 0 || readiness.ageMs === null || readiness.ageMs > 2000 ||
+                ![2, 6, 8, 13].includes(readiness.status) || this.robot.camera.state().running) {
                 throw new Error("Stop the current task and camera before changing the cleaning mode");
             }
             const current = await this.robot.miotHelper.readProperty(4, 23);
