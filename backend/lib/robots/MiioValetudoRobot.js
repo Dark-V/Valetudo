@@ -393,6 +393,7 @@ class MiioValetudoRobot extends ValetudoRobot {
      */
     onIncomingCloudMessage(msg) {
         switch (msg.method) {
+            case "_sync.gen_tmp_url_v3":
             case "_sync.gen_tmp_presigned_url":
             case "_sync.gen_presigned_url":
             case "_sync.batch_gen_room_up_url": {
@@ -404,7 +405,7 @@ class MiioValetudoRobot extends ValetudoRobot {
                 const expires = Math.floor(new Date(new Date().getTime() + 15 * 60000).getTime() / 1000); //+15min;
                 let url = `${this.mapUploadUrlPrefix}/api/miio/fds_upload_handler?ts=${process.hrtime().toString().replace(/,/g, "")}&suffix=${key}&Expires=${expires}`;
 
-                if (msg.method === "_sync.gen_tmp_presigned_url") {
+                if (msg.method === "_sync.gen_tmp_presigned_url" || msg.method === "_sync.gen_tmp_url_v3") {
                     result[key] = indices.map(i => {
                         return {
                             url: url + "&index=" + i + "&method=" + msg.method,
