@@ -4,8 +4,25 @@ const zlib = require("zlib");
 
 const READ_PROPERTIES = Object.freeze([
     [2, 1], [2, 2], [2, 3], [3, 1], [3, 2],
-    [4, 1], [4, 2], [4, 3], [4, 5], [4, 25], [7, 1]
+    [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 25], [7, 1]
 ]);
+// Stock packed clean-setting 4/23: low byte selects operation mode;
+// upper bytes contain mop washing/wetness settings and must be preserved.
+const OPERATION_MODES = Object.freeze({vacuum_and_mop: 0, mop: 1, vacuum: 2, vacuum_then_mop: 3});
+function validCleanSettings(value) {
+    return Number.isInteger(value) && value >= 0 && value <= 999999999 && value % 256 <= 3;
+}
+
+function operationMode(value) {
+    return validCleanSettings(value) ? Object.keys(OPERATION_MODES).find(name => OPERATION_MODES[name] === value % 256) : undefined;
+}
+
+function withOperationMode(value, preset) {
+    if (!validCleanSettings(value) || !Object.hasOwn(OPERATION_MODES, preset)) {
+        throw new Error("D103CN: unsupported clean settings or operation mode");
+    }
+    return value - value % 256 + OPERATION_MODES[preset];
+}
 const BASIC_ACTIONS = Object.freeze([[2, 1], [2, 2], [4, 2], [3, 1]]);
 // Public MIOT action IDs; intentionally NOT advertised as working dock capabilities yet.
 const DOCK_ACTIONS = Object.freeze([[2, 4], [2, 6], [2, 8], [2, 9], [2, 10]]);
@@ -99,6 +116,7 @@ function commandAllowed(method, args, policy = {}) {
         return args.every(p => p && Number.isInteger(p.value) && (
             (p.siid === 2 && p.piid === 3 && p.value >= 0 && p.value <= 3) ||
             (p.siid === 4 && p.piid === 5 && p.value >= 1 && p.value <= 3) ||
+            (p.siid === 4 && p.piid === 23 && args.length === 1 && validCleanSettings(p.value)) ||
             (p.siid === 7 && p.piid === 1 && p.value >= 0 && p.value <= 100)
         ));
     }
@@ -134,12 +152,12 @@ function summarizeState(properties) {
             level: level, flag: charging === 1 ? (level === 100 ? "charged" : "charging") :
                 charging === 2 ? "discharging" : "none"
         } : undefined,
-        fan: values.get("2/3"), water: values.get("4/5"),
+        fan: values.get("2/3"), water: values.get("4/5"), operationMode: operationMode(values.get("4/23")),
         dock: status === undefined || stateMap[status] === undefined ? undefined :
             ({8: "drying", 9: "cleaning", 21: "pause", 22: "emptying", 30: "cleaning"})[status] ?? "idle",
         // No speculative conversion of clean_area to cm²: retain its raw value for diagnostics.
         diagnostics: {cleanTimeMinutes: values.get("4/2"), cleanAreaRaw: values.get("4/3"),
-            washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1")}
+            washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23")}
     };
 }
 
@@ -183,6 +201,8 @@ function decodeMapEnvelope(input, options = {}) {
 }
 
 module.exports = {READ_PROPERTIES: READ_PROPERTIES, BASIC_ACTIONS: BASIC_ACTIONS, DOCK_ACTIONS: DOCK_ACTIONS,
+    OPERATION_MODES: OPERATION_MODES, validCleanSettings: validCleanSettings,
+    operationMode: operationMode, withOperationMode: withOperationMode,
     MANUAL_LIMITS: MANUAL_LIMITS, manualPayload: manualPayload, validManualPayload: validManualPayload,
     normalizeSecret: normalizeSecret, parseDeviceId: parseDeviceId,
     matchesModel: matchesModel, commandAllowed: commandAllowed, summarizeState: summarizeState, decodeMapEnvelope: decodeMapEnvelope};

@@ -5,6 +5,7 @@ const D103 = require("./D103CNProtocol");
 const D103CNCamera = require("./D103CNCamera");
 const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentStatisticsCapability");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
+const D103CNOperationModeControlCapability = require("./capabilities/D103CNOperationModeControlCapability");
 const D103CNSavedMap = require("./D103CNSavedMap");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
 const dgram = require("dgram");
@@ -57,6 +58,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.registerCapability(new D103CNCurrentStatisticsCapability({robot: this}));
 
         if (this.implConfig.allowControls === true) {
+            this.registerCapability(new D103CNOperationModeControlCapability({
+                robot: this, presets: Object.entries(D103.OPERATION_MODES).map(([name, value]) =>
+                    new ValetudoSelectionPreset({name: name, value: value}))
+            }));
             this.registerCapability(new capabilities.DreameBasicControlCapability({
                 robot: this, miot_actions: {start: {siid: 2, aiid: 1}, pause: {siid: 2, aiid: 2},
                     stop: {siid: 4, aiid: 2}, home: {siid: 3, aiid: 1}}
@@ -196,10 +201,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     /**
      * Refresh only status/fault, independent of which UI page is open.
-     * @param {{noRetry?: boolean}} options Read-only camera startup may handshake after idle.
+     * @param {{noRetry?: boolean, force?: boolean}} options Read-only camera startup may handshake after idle.
      */
     async refreshControlState(options = {}) {
-        if (performance.now() - Math.min(this.lastStateAt, this.lastFaultAt) < 2000) {
+        if (options.force !== true && performance.now() - Math.min(this.lastStateAt, this.lastFaultAt) < 2000) {
             return;
         }
         if (this.controlPollInFlight) {
@@ -286,6 +291,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
         if (parsed.battery) {
             this.state.upsertFirstMatchingAttribute(new attrs.BatteryStateAttribute(parsed.battery));
+        }
+        if (parsed.operationMode) {
+            this.state.upsertFirstMatchingAttribute(new attrs.PresetSelectionStateAttribute({
+                type: attrs.PresetSelectionStateAttribute.TYPE.OPERATION_MODE, value: parsed.operationMode
+            }));
         }
         for (const [raw, presets, type] of [[parsed.fan, FAN_PRESETS, "fan_speed"], [parsed.water - 1, WATER_PRESETS, "water_grade"]]) {
             if (presets[raw]) {
