@@ -63,6 +63,7 @@ class MiioValetudoRobot extends ValetudoRobot {
             cloudSecret: this.cloudSecret,
             deviceId: this.deviceId,
             bindIP: this.dummycloudBindIp,
+            cloudNtpUsesUptime: this.implConfig.cloudNtpUsesUptime === true,
             onConnected: () => {
                 return this.onCloudConnected();
             },

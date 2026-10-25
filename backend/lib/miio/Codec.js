@@ -9,9 +9,11 @@ class Codec {
     /**
      * @param {object} options
      * @param {Buffer} options.token
+     * @param {boolean=} options.acceptHandshakeToken
      */
     constructor(options) {
         this.setToken(options.token);
+        this.acceptHandshakeToken = options.acceptHandshakeToken ?? true;
 
         this.stamp = new Stamp({});
     }
@@ -85,10 +87,10 @@ class Codec {
                 Logger.error("Invalid miIO checksum; packet and token redacted");
             } else {
                 // If we receive an empty packet with a wrong checksum, assume that we're instead being provided a new token.
-                token = Buffer.from(header.subarray(16));
+                token = this.acceptHandshakeToken ? Buffer.from(header.subarray(16)) : null;
 
                 if (
-                    token.toString("hex") !== "ffffffffffffffffffffffffffffffff" &&
+                    token && token.toString("hex") !== "ffffffffffffffffffffffffffffffff" &&
                     token.toString("hex") !== "00000000000000000000000000000000" &&
                     !(this.token.equals(token))
                 ) {

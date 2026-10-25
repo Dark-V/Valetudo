@@ -21,9 +21,11 @@ class MiioSocket {
      * @param {(() => void)=} [options.onConnected] function to call after completing a handshake
      * @param {string} options.name Name used to disambiguate logging messages
      * @param {boolean=} options.isCloudSocket Cloud sockets send time sync replies
+     * @param {boolean=} options.cloudNtpUsesUptime D103CN broadcast NTP uses uptime, not zero.
      */
     constructor(options) {
-        this.codec = new Codec({token: options.token});
+        this.codec = new Codec({token: options.token,
+            acceptHandshakeToken: !(options.isCloudSocket && options.cloudNtpUsesUptime)});
         this.deviceId = options.deviceId;
         this.socket = options.socket;
         this.rinfo = options.rinfo;
@@ -45,6 +47,7 @@ class MiioSocket {
         this.onConnected = options.onConnected;
         this.connected = false;
         this.isCloudSocket = options.isCloudSocket;
+        this.cloudNtpUsesUptime = options.cloudNtpUsesUptime === true;
         /** @type {null | ((msg: import("./DecodedMiioPacket")) => void)} */
         this.onEmptyPacket = null;
 
@@ -69,7 +72,9 @@ class MiioSocket {
 
             if (msg === null) {
                 if (this.isCloudSocket) {
-                    if (decodedIncomingPacket.stamp === 0) {
+                    if (decodedIncomingPacket.stamp === 0 || (this.cloudNtpUsesUptime && incomingMsg.length === 32 &&
+                        incomingMsg.readUInt32BE(4) === 0xffffffff && decodedIncomingPacket.deviceId === 0xffffffff &&
+                        decodedIncomingPacket.stamp < 1000000000)) {
                         //Important note: Responding with a time sync packet causes the miio_client to restart
 
                         const response = createMiioHeader({timestamp: new Date().getTime() / 1000});
