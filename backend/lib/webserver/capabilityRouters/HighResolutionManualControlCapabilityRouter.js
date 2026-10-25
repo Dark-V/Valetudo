@@ -11,7 +11,7 @@ class HighResolutionManualControlCapabilityRouter extends CapabilityRouter {
             });
             this.router.get("/camera/readiness", async (req, res) => {
                 try {
-                    await this.capability.robot.refreshControlState();
+                    await this.capability.robot.refreshControlState({noRetry: false});
                     res.set("Cache-Control", "no-store").json(this.capability.robot.getControlReadiness());
                 } catch (e) {
                     this.sendErrorResponse(req, res, e);

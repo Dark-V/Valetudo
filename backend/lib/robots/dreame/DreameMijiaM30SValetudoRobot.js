@@ -184,8 +184,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
     }
 
-    /** Refresh only status/fault, independent of which UI page is open. */
-    async refreshControlState() {
+    /**
+     * Refresh only status/fault, independent of which UI page is open.
+     * @param {{noRetry?: boolean}} options Read-only camera startup may handshake after idle.
+     */
+    async refreshControlState(options = {}) {
         if (performance.now() - Math.min(this.lastStateAt, this.lastFaultAt) < 2000) {
             return;
         }
@@ -195,7 +198,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.controlPollInFlight = (async () => {
             const response = await this.sendCommand("get_properties", [1, 2].map(piid => ({
                 did: this.deviceId, siid: 2, piid: piid
-            })), {timeout: 700, noRetry: true});
+            })), {timeout: 700, noRetry: options.noRetry ?? true});
             if (!Array.isArray(response) || ![1, 2].every(piid => response.some(p =>
                 p?.siid === 2 && p.piid === piid && p.code === 0 && Number.isInteger(p.value) && p.value >= 0))) {
                 throw new Error("D103CN status/fault readback is incomplete");
@@ -240,7 +243,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         return {status: status ?? null, fault: fault ?? null,
             ageMs: Number.isFinite(age) ? Math.round(age) : null,
             ready: fault === 0 && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000,
-            refreshError: this.lastControlPollError};
+            refreshError: age <= 2000 ? null : this.lastControlPollError};
     }
 
     parseAndUpdateState(data) {
