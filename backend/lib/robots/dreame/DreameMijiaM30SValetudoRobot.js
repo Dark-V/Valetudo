@@ -24,6 +24,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.d103State = [];
         this.lastDiagnostics = {};
         this.lastStateAt = -Infinity;
+        this.lastFaultAt = -Infinity;
+        this.controlPollInFlight = null;
+        this.controlConsumers = new Set();
+        this.controlStateTimer = null;
+        this.lastControlPollError = null;
         this.authenticatedCloudMessages = 0;
         this.mapFramesParsed = 0;
         this.pollInFlight = null;
@@ -119,14 +124,76 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
     }
 
+    /** Refresh only status/fault, independent of which UI page is open. */
+    async refreshControlState() {
+        if (performance.now() - Math.min(this.lastStateAt, this.lastFaultAt) < 2000) {
+            return;
+        }
+        if (this.controlPollInFlight) {
+            return this.controlPollInFlight;
+        }
+        this.controlPollInFlight = (async () => {
+            const response = await this.sendCommand("get_properties", [1, 2].map(piid => ({
+                did: this.deviceId, siid: 2, piid: piid
+            })), {timeout: 700, noRetry: true});
+            if (!Array.isArray(response) || ![1, 2].every(piid => response.some(p =>
+                p?.siid === 2 && p.piid === piid && p.code === 0 && Number.isInteger(p.value) && p.value >= 0))) {
+                throw new Error("D103CN status/fault readback is incomplete");
+            }
+            this.parseAndUpdateState(response);
+            this.lastControlPollError = null;
+        })();
+        try {
+            await this.controlPollInFlight;
+        } catch (e) {
+            this.lastControlPollError = "Status/fault refresh failed";
+            throw e;
+        } finally {
+            this.controlPollInFlight = null;
+        }
+    }
+
+    /** @param {string} consumer */
+    beginControlMonitoring(consumer) {
+        this.controlConsumers.add(consumer);
+        if (!this.controlStateTimer) {
+            this.controlStateTimer = setInterval(() => {
+                this.refreshControlState().catch(() => {}); // Existing age guards fail closed on loss of telemetry.
+            }, 1000);
+            this.controlStateTimer.unref();
+        }
+    }
+
+    /** @param {string} consumer */
+    endControlMonitoring(consumer) {
+        this.controlConsumers.delete(consumer);
+        if (this.controlConsumers.size === 0) {
+            clearInterval(this.controlStateTimer);
+            this.controlStateTimer = null;
+        }
+    }
+
+    getControlReadiness() {
+        const status = this.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
+        const fault = this.d103State.find(p => p.siid === 2 && p.piid === 2)?.value;
+        const age = performance.now() - Math.min(this.lastStateAt, this.lastFaultAt);
+        return {status: status ?? null, fault: fault ?? null,
+            ageMs: Number.isFinite(age) ? Math.round(age) : null,
+            ready: fault === 0 && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000,
+            refreshError: this.lastControlPollError};
+    }
+
     parseAndUpdateState(data) {
         if (!Array.isArray(data)) {
             return;
         }
         for (const p of data) {
             if (p && p.code === 0 && D103.READ_PROPERTIES.some(([s, i]) => p.siid === s && p.piid === i)) {
-                if (p.siid === 2 && p.piid === 1) {
+                if (p.siid === 2 && p.piid === 1 && Number.isInteger(p.value)) {
                     this.lastStateAt = performance.now();
+                }
+                if (p.siid === 2 && p.piid === 2 && Number.isInteger(p.value)) {
+                    this.lastFaultAt = performance.now();
                 }
                 this.d103State = this.d103State.filter(old => old.siid !== p.siid || old.piid !== p.piid);
                 this.d103State.push(p);
@@ -229,6 +296,8 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     }
 
     async shutdown() {
+        clearInterval(this.controlStateTimer);
+        this.controlStateTimer = null;
         const manual = this.capabilities.HighResolutionManualControlCapability;
         if (manual) {
             await manual.disableManualControl().catch(() => Logger.warn("D103CN shutdown stop was not acknowledged"));
@@ -242,7 +311,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     getProperties() {
         return {experimental: true, controlsEnabled: this.implConfig.allowControls === true,
             cloudAuthenticatedMessages: this.authenticatedCloudMessages, mapFramesParsed: this.mapFramesParsed,
-            diagnostics: this.lastDiagnostics};
+            diagnostics: this.lastDiagnostics, controlReadiness: this.getControlReadiness()};
     }
 
     static IMPLEMENTATION_AUTO_DETECTION_HANDLER() {

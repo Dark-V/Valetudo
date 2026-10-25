@@ -37,7 +37,7 @@ class D103CNCamera {
             frameAgeMs: this.frame ? Math.round(performance.now() - this.frame.at) : null,
             sequence: this.frame?.sequence ?? 0,
             fps: this.started ? Math.round(this.received * 10000 / Math.max(1, performance.now() - this.started)) / 10 : 0,
-            error: this.error, maxFps: 10, leaseSeconds: 5,
+            error: this.error, maxFps: 10, leaseSeconds: 5, readiness: this.robot.getControlReadiness(),
             description: "SC035GS monochrome navigation camera; factory exposure while driving"};
     }
 
@@ -45,15 +45,17 @@ class D103CNCamera {
         if (this.child || this.stopping) {
             throw new Error("Camera is already open or restoring; stop it before changing mode");
         }
+        await this.robot.refreshControlState();
+        if (this.child || this.stopping) {
+            throw new Error("Camera session changed during state refresh; retry");
+        }
         const manual = this.robot.capabilities.HighResolutionManualControlCapability;
         if (manual?.enabling || manual?.stopping || (bright && manual?.active)) {
             throw new Error("Bright camera mode is unavailable with manual control enabled");
         }
-        const status = this.robot.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
-        if (performance.now() - this.robot.lastStateAt > 10000 ||
-            ![2, 3, 6, 13, 21, 23].includes(status) ||
-            this.robot.d103State.find(p => p.siid === 2 && p.piid === 2)?.value !== 0) {
-            throw new Error("Camera start requires recent idle/paused/docked state without a fault");
+        const readiness = this.robot.getControlReadiness();
+        if (!readiness.ready) {
+            throw new Error(`Camera not ready: status=${readiness.status}, fault=${readiness.fault}, ageMs=${readiness.ageMs}`);
         }
         this.frame = null;
         this.epoch++;
@@ -67,6 +69,7 @@ class D103CNCamera {
             stdio: ["pipe", "pipe", "pipe"], env: {PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LC_ALL: "C"}
         });
         this.child = child;
+        this.robot.beginControlMonitoring("camera");
         if (manual?.active) {
             child.stdin.write("M");
         }
@@ -98,6 +101,7 @@ class D103CNCamera {
                 clearInterval(this.timer);
                 this.timer = null;
                 this.child = null;
+                this.robot.endControlMonitoring("camera");
                 this.frame = null;
                 this.buffer = Buffer.alloc(0);
                 this.bright = false;
@@ -112,7 +116,9 @@ class D103CNCamera {
             const now = performance.now();
             const statusNow = this.robot.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
             const manualNow = this.robot.capabilities.HighResolutionManualControlCapability;
-            if ((ready && now - this.lastRequest > 5000) || now - this.robot.lastStateAt > 10000 ||
+            const readinessNow = this.robot.getControlReadiness();
+            if ((ready && now - this.lastRequest > 5000) || readinessNow.fault !== 0 ||
+                readinessNow.ageMs === null || readinessNow.ageMs > 10000 ||
                 (!manualNow?.active && ![2, 3, 6, 13, 21, 23].includes(statusNow)) ||
                 (this.frame ? now - this.frame.at > 5000 : now - this.started > 10000)) {
                 this.stop().catch(() => Logger.warn("D103CN camera restore did not finish"));

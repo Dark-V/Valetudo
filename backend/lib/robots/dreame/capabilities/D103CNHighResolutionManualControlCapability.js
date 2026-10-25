@@ -25,11 +25,9 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
     }
 
     assertReady() {
-        const status = this.robot.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
-        const fault = this.robot.d103State.find(p => p.siid === 2 && p.piid === 2)?.value;
-        if (fault !== 0 || ![2, 3, 6, 13, 23].includes(status) ||
-            performance.now() - this.robot.lastStateAt > 10000) {
-            throw new Error("D103CN manual control requires recent idle/paused/docked state without a fault");
+        const readiness = this.robot.getControlReadiness();
+        if (!readiness.ready) {
+            throw new Error(`D103CN manual control not ready: status=${readiness.status}, fault=${readiness.fault}, ageMs=${readiness.ageMs}`);
         }
     }
 
@@ -61,16 +59,19 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
         if (this.enabling || this.stopping) {
             throw new Error("D103CN manual mode is changing");
         }
-        this.assertReady();
         this.enabling = true;
         const session = ++this.session;
         try {
+            await this.robot.refreshControlState();
+            this.assertReady();
             await this.robot.camera.factoryForManual();
+            this.assertReady();
             await this.write(D103.manualPayload({velocity: 0, angle: 0}, true));
             if (session !== this.session || this.stopping) {
                 throw new Error("D103CN manual enable cancelled");
             }
             this.active = true;
+            this.robot.beginControlMonitoring("manual");
             this.moving = false;
             this.lastInput = performance.now();
             this.timer = setInterval(() => {
@@ -132,6 +133,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             return;
         }
         this.active = false;
+        this.robot.endControlMonitoring("manual");
         this.session++;
         this.moving = false;
         clearInterval(this.timer);
