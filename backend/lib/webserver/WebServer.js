@@ -152,7 +152,17 @@ class WebServer {
 
         this.app.use("/_ssdp/", new SSDPRouter({config: this.config, robot: this.robot, valetudoHelper: this.valetudoHelper}).getRouter());
 
-        this.app.use(express.static(path.join(__dirname, "../../..", "frontend/build")));
+        this.app.use(express.static(path.join(__dirname, "../../..", "frontend/build"), {
+            // Packaged assets have zero mtimes. Equal-length index.html files
+            // otherwise share an ETag across builds and point at removed JS.
+            etag: false,
+            lastModified: false,
+            setHeaders: (res, file) => {
+                if (path.basename(file) === "index.html") {
+                    res.setHeader("Cache-Control", "no-store");
+                }
+            }
+        }));
 
 
         this.robot.initModelSpecificWebserverRoutes(this.app);
