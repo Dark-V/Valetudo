@@ -1,0 +1,91 @@
+{
+  "embedded": true,
+  "robot": {
+    "implementation": "DreameMijiaM30SValetudoRobot",
+    "implementationSpecificConfig": {
+      "ip": "__D103_SELF_IP__",
+      "dummycloudIp": "127.0.0.1",
+      "dummycloudBindIp": "127.0.0.1",
+      "allowControls": true,
+      "enableMapPolling": true,
+      "allowManualControl": true,
+      "cloudNtpUsesUptime": true,
+      "enableLegacyCloudMapPolling": true
+    }
+  },
+  "webserver": {
+    "port": 18080,
+    "basicAuth": {
+      "enabled": false,
+      "username": "valetudo",
+      "password": "valetudo"
+    },
+    "blockExternalAccess": true
+  },
+  "mqtt": {
+    "enabled": false,
+    "connection": {
+      "host": "unused.invalid",
+      "port": 1883,
+      "tls": {
+        "enabled": false,
+        "ca": "",
+        "ignoreCertificateErrors": false
+      },
+      "authentication": {
+        "credentials": {
+          "enabled": false,
+          "username": "",
+          "password": ""
+        },
+        "clientCertificate": {
+          "enabled": false,
+          "certificate": "",
+          "key": ""
+        }
+      }
+    },
+    "identity": {
+      "identifier": ""
+    },
+    "customizations": {
+      "topicPrefix": ""
+    },
+    "optionalExposedCapabilities": []
+  },
+  "ntpClient": {
+    "enabled": false,
+    "server": "unused.invalid",
+    "port": 123,
+    "interval": 28800000,
+    "timeout": 10000
+  },
+  "timers": {},
+  "logLevel": "info",
+  "debug": {
+    "debugHassAnchors": false,
+    "storeRawFDSUploads": false
+  },
+  "networkAdvertisement": {
+    "enabled": false
+  },
+  "updater": {
+    "enabled": false,
+    "updateProvider": {
+      "type": "github",
+      "implementationSpecificConfig": {}
+    }
+  },
+  "oobe": {
+    "welcomeDialogDismissed": true
+  },
+  "duststreaming": {
+    "enabled": false
+  },
+  "valetudo": {
+    "customizations": {
+      "friendlyName": "Xiaomi Mijia M30S"
+    }
+  },
+  "_version": "2026.08.0"
+}

@@ -1,3 +1,5 @@
+> **Experimental D103CN fork:** Xiaomi Mijia M30S, tested on factory firmware 4.5.6_1409. See [port documentation and build instructions](d103cn/README.md). This model is not officially supported by upstream Valetudo.
+
 <div align="center">
     <img src="https://github.com/Hypfer/Valetudo/blob/master/assets/logo/valetudo_logo_with_name.svg" width="800" alt="valetudo">
     <p align="center"><h2>Free your vacuum from the cloud</h2></p>

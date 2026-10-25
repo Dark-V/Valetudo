@@ -1,0 +1,50 @@
+{
+  "helper-trial.sh": {
+    "baseSha256": "71e06c568f9012d0ca8cae0620b78b9b7962cde5e89487af5ef626e7e274037a",
+    "resultSha256": "726aecca97450e16f9c20721d0251cf5e5dc7e46303fcca4004a1d7b0cafcdb7",
+    "edits": [
+      {
+        "start": 2625,
+        "end": 2660,
+        "text": "    : # trial preserves existing robot message queues\n"
+      },
+      {
+        "start": 2762,
+        "end": 2794,
+        "text": "        echo retry_limit > \"$D103_SDK_TRIAL_DIR/helper-rejected\"; exit 92;\n"
+      },
+      {
+        "start": 12219,
+        "end": 12219,
+        "text": "    trial_method=$(printf '%s\\n' \"$BUF\" | /usr/bin/jshon -e method -u 2>/dev/null || :)\n    case \"$trial_method\" in\n        _internal.info|_internal.req_wifi_conf_status|_internal.request_dinfo|_internal.request_dtoken|_internal.request_ot_config|_internal.record_offline) ;;\n        *) printf '%s\\n' \"${trial_method:-unknown}\" > \"$D103_SDK_TRIAL_DIR/helper-rejected\"; exit 91 ;;\n    esac\n"
+      },
+      {
+        "start": 20720,
+        "end": 20720,
+        "text": "# Temporary trial restrictions; upstream protocol response functions are retained.\nlog() { :; }\nwifi_choose() { :; } # Report the existing association without roaming.\nauto_ota=false\nMIIO_SDK_MJAC=false\nIOT_FLAG=\"$D103_SDK_TRIAL_DIR/iot.flag\"\nDM_FLAG=\"$D103_SDK_TRIAL_DIR/no-dm.flag\"\n"
+      }
+    ]
+  },
+  "msg-cvt-trial.sh": {
+    "baseSha256": "61a42304c8f9dfc88fdedbb6ef529b29c136ded3db2e02167887a437d2418bcc",
+    "resultSha256": "5f544954a46c631cb1eafdd05455ec4aa78d561ecb21d81d5a3c7f872f5a4cb2",
+    "edits": [
+      {
+        "start": 8725,
+        "end": 8725,
+        "text": "    return 0 # upstream Dreame user-change guard\n"
+      }
+    ]
+  },
+  "fds-hook-trial.sh": {
+    "baseSha256": "0a1aa80a30bf258932bcd28dded1fb73f532c0d2938e07fd04cfa5c1ffe17937",
+    "resultSha256": "861a7b91b22132c906ca1f587ca0606e13471f772a2ea3ca9ccf87a7e104f5ef",
+    "edits": [
+      {
+        "start": 175,
+        "end": 175,
+        "text": "# Plaintext map upload, as in upstream Dreame deployment; loopback only.\ncase \"${TYPE}:${URL}\" in\n FDS_TMP:http://127.0.0.1:8079/api/miio/fds_upload_handler[?]*) ENC_FILE=nah ;;\nesac\n"
+      }
+    ]
+  }
+}
