@@ -42,6 +42,9 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.mapLastPollAt = null;
         this.mapLastError = null;
         this.mapBootstrapTimer = null;
+        this.mapFullFrameTimer = null;
+        this.mapCloudConnectedAt = 0;
+        this.mapLastRefreshAt = 0;
         this.savedMapFingerprint = null;
         this.savedMapSnapshots = 0;
         this.savedMapError = null;
@@ -338,9 +341,16 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         // Upstream fires this even on an empty/unauthenticated datagram. Do not call that auth success.
         Logger.info("D103CN cloud UDP transport seen; authenticated messages still required");
         if (this.implConfig.enableMapPolling === true && this.implConfig.enableLegacyCloudMapPolling === true) {
+            this.mapCloudConnectedAt = Date.now();
             clearTimeout(this.mapBootstrapTimer);
             this.mapBootstrapTimer = setTimeout(() => this.pollMap(), 5000);
             this.mapBootstrapTimer.unref();
+            clearTimeout(this.mapFullFrameTimer);
+            // The factory FDS cache survives an SDK handover. Its old object
+            // acknowledgement does not deliver that frame to a new Valetudo.
+            // Respect the native 30-second I-frame throttle before refreshing.
+            this.mapFullFrameTimer = setTimeout(() => this.pollMap(), 40000);
+            this.mapFullFrameTimer.unref();
         }
     }
 
@@ -395,10 +405,18 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             return;
         }
         this.mapLastPollAt = Date.now();
+        const refresh = this.mapCloudConnectedAt > 0 &&
+            this.mapLastPollAt - this.mapCloudConnectedAt >= 35000 &&
+            this.mapLastPollAt - this.lastLiveMapAt > 60000 &&
+            this.mapLastPollAt - this.mapLastRefreshAt > 30000;
+        if (refresh) {
+            this.mapLastRefreshAt = this.mapLastPollAt;
+        }
         let result;
         try {
             result = await this.sendCommand("action", {did: this.deviceId, siid: 6, aiid: 1,
-                in: [{piid: 2, value: '{"frame_type":"I", "force_type":1, "req_type":1}'}]},
+                in: [{piid: 2, value: refresh ? '{"frame_type":"I","req_type":2}' :
+                    '{"frame_type":"I", "force_type":1, "req_type":1}'}]},
             {timeout: 7000, interface: "cloud"});
         } catch (e) {
             this.mapLastError = "Local SDK map request was not acknowledged";
@@ -429,6 +447,12 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     async handleUploadedFDSData(data) {
         if (this.implConfig.enableMapPolling === true) {
+            // Same non-map upload types ignored by upstream DreameValetudoRobot.
+            // Keep private multi-map metadata out of public application logs.
+            if (Buffer.isBuffer(data) && (data[0] === 0x7b || data[0] === 0x5b ||
+                (data[0] === 0x42 && data[1] === 0x5a && data[2] === 0x68))) {
+                return;
+            }
             await this.acceptMap(data);
         }
     }
@@ -439,6 +463,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     async shutdown() {
         clearTimeout(this.mapBootstrapTimer);
+        clearTimeout(this.mapFullFrameTimer);
         clearTimeout(this.mapPollTimeout);
         clearInterval(this.controlStateTimer);
         this.controlStateTimer = null;
