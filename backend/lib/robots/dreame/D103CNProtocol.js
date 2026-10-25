@@ -116,7 +116,10 @@ function commandAllowed(method, args, policy = {}) {
         // Map request is not a cleaning action, but remains a separate, explicit trial step.
         return policy.enableMapPolling === true && args.siid === 6 && args.aiid === 1 &&
             args.in.length === 1 && args.in[0].piid === 2 &&
-            args.in[0].value === '{"frame_type":"I", "force_type":1, "req_type":1}';
+            [
+                '{"frame_type":"I", "force_type":1, "req_type":1}',
+                '{"frame_type":"I","req_type":2}'
+            ].includes(args.in[0].value);
     }
     if (method === "set_properties" && policy.allowControls === true && Array.isArray(args) &&
         args.length > 0 && args.length <= 3) {
