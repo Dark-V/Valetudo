@@ -1,4 +1,5 @@
 const capabilities = require("./capabilities");
+const D103CNSpotCleaningCapability = require("./capabilities/D103CNSpotCleaningCapability");
 const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZone");
 
 /**
@@ -7,6 +8,7 @@ const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZo
  * @param {import("./DreameMijiaM30SValetudoRobot")} robot
  */
 function registerFeatures(robot) {
+    robot.registerCapability(new D103CNSpotCleaningCapability({robot: robot}));
     const dreame = /** @type {import("./DreameValetudoRobot")} */ (/** @type {unknown} */ (robot));
     const task = {
         robot: dreame,
@@ -32,6 +34,11 @@ function registerFeatures(robot) {
         ...map, supportedRestrictedZoneTypes: [ValetudoRestrictedZone.TYPE.REGULAR, ValetudoRestrictedZone.TYPE.MOP]
     }));
     robot.registerCapability(new capabilities.DreameMappingPassCapability({robot: dreame}));
+    robot.registerCapability(new capabilities.DreameTotalStatisticsCapability({robot: dreame, miot_properties: {
+        time: {siid: 12, piid: 2}, count: {siid: 12, piid: 3}, area: {siid: 12, piid: 4}
+    }}));
+    robot.registerCapability(new capabilities.DreameMopDockMopDryingTimeControlCapability({robot: dreame}));
+    robot.registerCapability(new capabilities.DreameMopDockMopAutoDryingControlCapability({robot: dreame}));
     robot.registerCapability(new capabilities.DreameCarpetModeControlCapability({robot: dreame}));
     robot.registerCapability(new capabilities.DreameCarpetSensorModeControlCapability({
         robot: dreame, liftSupported: true, detachSupported: false

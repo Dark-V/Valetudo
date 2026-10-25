@@ -1,7 +1,8 @@
 /* Native D103CN feature contracts. No transport, setters or emulated device. */
 const READ_PROPERTIES = Object.freeze([
     [4, 12], [4, 27], [4, 28], [4, 33], [4, 36],
-    [5, 1], [5, 2], [5, 3], [9, 1], [10, 1], [11, 2], [18, 1]
+    [5, 1], [5, 2], [5, 3], [9, 1], [10, 1], [11, 2], [18, 1],
+    [4, 40], [12, 2], [12, 3], [12, 4]
 ]);
 
 const segmentId = value => Number.isInteger(value) && value >= 1 && value <= 255;
@@ -32,6 +33,14 @@ function validTask(inputs) {
     }
     const mode = inputs[0].value;
     const payload = jsonObject(inputs[1].value);
+    if (mode === 20 && keysAre(payload, ["points"])) {
+        const rows = payload.points;
+        return Array.isArray(rows) && rows.length === 1 && rows.every(row =>
+            Array.isArray(row) && row.length === 5 && row.slice(0, 2).every(n => Number.isInteger(n) && coordinate(n)) &&
+            Number.isInteger(row[2]) && row[2] >= 1 && row[2] <= 4 &&
+            Number.isInteger(row[3]) && row[3] >= 0 && row[3] <= 3 &&
+            Number.isInteger(row[4]) && row[4] >= 1 && row[4] <= 3);
+    }
     if (mode === 18 && keysAre(payload, ["selects"])) {
         const rows = payload.selects;
         return Array.isArray(rows) && rows.length > 0 && rows.length <= 64 &&
@@ -104,7 +113,8 @@ function writeAllowed(p) {
     return p.siid === 4 && Number.isInteger(p.value) && (
         ([12, 27, 33].includes(p.piid) && [0, 1].includes(p.value)) ||
         (p.piid === 28 && [1, 2, 3].includes(p.value)) ||
-        (p.piid === 36 && [1, 2].includes(p.value))
+        (p.piid === 36 && [1, 2].includes(p.value)) ||
+        (p.piid === 40 && [2, 3, 4].includes(p.value))
     );
 }
 
