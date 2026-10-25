@@ -24,6 +24,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
         this.watchdogBusy = false;
         this.lastError = null;
         this.lastAckAt = 0;
+        this.lastAckLatencyMs = null;
     }
 
     assertReady() {
@@ -39,15 +40,21 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             throw new Error("D103CN manual channel busy; stale commands are not queued");
         }
         this.pending = (async () => {
+            const began = performance.now();
+            const vector = JSON.parse(payload);
+            // Real stock trace: successful zero keepalive ACK arrived after 552 ms.
+            // Stationary/stop ACKs get 1 s; moving ACKs stay below the 800 ms deadman.
+            const timeout = vector.spdv === 0 && vector.spdw === 0 ? 1000 : 700;
+            this.lastSent = began; // Keepalive cadence starts at dispatch, not at the delayed ACK.
             const result = await this.robot.sendCommand("set_properties", [{
                 did: this.robot.deviceId, siid: 4, piid: 15, value: payload
-            }], {timeout: 350, noRetry: true});
+            }], {timeout: timeout, noRetry: true});
             if (!Array.isArray(result) || result.length !== 1 || result[0].code !== 0) {
                 const code = Number.isInteger(result?.[0]?.code) ? result[0].code : "invalid reply";
                 throw new Error(`D103CN manual command rejected: ${code}`);
             }
-            this.lastSent = performance.now();
-            this.lastAckAt = this.lastSent;
+            this.lastAckAt = performance.now();
+            this.lastAckLatencyMs = Math.round(this.lastAckAt - began);
         })();
         try {
             await this.pending;
@@ -172,11 +179,13 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
         return {experimental: true, cameraRequired: false, liveCamera: this.robot.camera.state().available,
             maxLinearCommand: D103.MANUAL_LIMITS.velocity,
             maxAngularCommand: D103.MANUAL_LIMITS.rotation, deadmanTimeoutMs: D103.MANUAL_LIMITS.deadmanMs,
+            movingAckTimeoutMs: 700, stationaryAckTimeoutMs: 1000,
             motionTested: false};
     }
 
     getDiagnostics() {
         return {error: this.lastError, pending: !!this.pending, moving: this.moving,
+            lastAckLatencyMs: this.lastAckLatencyMs,
             lastAckAgeMs: this.lastAckAt ? Math.round(performance.now() - this.lastAckAt) : null};
     }
 }
