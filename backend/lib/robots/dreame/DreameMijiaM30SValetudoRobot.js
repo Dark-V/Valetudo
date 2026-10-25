@@ -12,6 +12,7 @@ const dgram = require("dgram");
 const DreameMapParser = require("./DreameMapParser");
 const DreameMiotHelper = require("./DreameMiotHelper");
 const DreameQuirkFactory = require("./DreameQuirkFactory");
+const DreameValetudoRobot = require("./DreameValetudoRobot");
 const fs = require("fs");
 const Logger = require("../../Logger");
 const MiioSocket = require("../../miio/MiioSocket");
@@ -215,10 +216,14 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
         this.pollInFlight = (async () => {
             // Bound packet size; do not run concurrent local RPCs on factory firmware.
+            const properties = [];
             for (let offset = 0; offset < D103.READ_PROPERTIES.length; offset += 8) {
                 const batch = D103.READ_PROPERTIES.slice(offset, offset + 8).map(([siid, piid]) => ({siid: siid, piid: piid}));
-                this.parseAndUpdateState(await this.miotHelper.readProperties(batch));
+                properties.push(...await this.miotHelper.readProperties(batch));
             }
+            // Publish the complete poll once, avoiding transient combinations
+            // of a new robot state and the previous station countdown/state.
+            this.parseAndUpdateState(properties);
             return this.state;
         })();
         try {
@@ -287,10 +292,19 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         const dockMopReminder = D103.isDockMopReminder(status, fault, charging);
         const effectiveFault = dockMopReminder ? 0 : fault;
         const age = performance.now() - Math.min(this.lastStateAt, this.lastFaultAt);
+        const dock = this.state.getFirstMatchingAttribute({attributeClass: "DockStatusStateAttribute"})?.value;
+        const stationBusy = ["drying", "cleaning", "emptying"].includes(dock);
+        const ready = effectiveFault === 0 && !stationBusy && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000;
+        const stationReason = ({drying: "Mops are drying", cleaning: "The station is washing the mops",
+            emptying: "The station is emptying the dustbin", pause: "The station operation is paused"})[dock];
+        const reason = ready ? null : age > 10000 ? "Robot state is stale; waiting for fresh telemetry" :
+            effectiveFault > 0 ? `Robot fault ${effectiveFault}; check the robot` :
+                stationReason ? `${stationReason}; manual driving is unavailable during station work` :
+                    "Manual driving requires an idle, paused or docked robot";
         return {status: status ?? null, fault: fault ?? null, effectiveFault: effectiveFault ?? null,
             dockMopReminder: dockMopReminder,
             ageMs: Number.isFinite(age) ? Math.round(age) : null,
-            ready: effectiveFault === 0 && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000,
+            ready: ready, reason: reason,
             cameraReady: effectiveFault === 0 && [2, 3, 6, 8, 13, 21, 23].includes(status) && age <= 10000,
             refreshError: age <= 2000 ? null : this.lastControlPollError};
     }
@@ -344,7 +358,21 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             }
         }
         if (parsed.dock) {
-            this.state.upsertFirstMatchingAttribute(new attrs.DockStatusStateAttribute({value: parsed.dock}));
+            // Match upstream Dreame's dock composition: the active auto-empty
+            // state takes precedence over the mop dock's wash/dry/pause state.
+            // 15/3 is availability, NOT the running state; use 15/5 here.
+            const mopDock = DreameValetudoRobot.MOP_DOCK_STATUS_MAP[parsed.station.mopDockStatus];
+            const autoEmpty = DreameValetudoRobot.AUTO_EMPTY_DOCK_STATUS_MAP[parsed.station.autoEmptyState];
+            const value = autoEmpty && autoEmpty !== "idle" ? autoEmpty : mopDock ?? parsed.dock;
+            const remaining = parsed.station.dryingRemainingMinutes;
+            const progress = parsed.station.dryingProgressPercent;
+            this.state.upsertFirstMatchingAttribute(new attrs.DockStatusStateAttribute({value: value, metaData: {
+                mopDockStatus: parsed.station.mopDockStatus, autoEmptyState: parsed.station.autoEmptyState,
+                ...(value === "drying" && Number.isInteger(remaining) && remaining >= 0 && remaining <= 1440 ?
+                    {dryingRemainingMinutes: remaining} : {}),
+                ...(value === "drying" && Number.isInteger(progress) && progress >= 0 && progress <= 100 ?
+                    {dryingProgressPercent: progress} : {})
+            }}));
         }
         this.lastDiagnostics = parsed.diagnostics;
         this.emitStateAttributesUpdated();

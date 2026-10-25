@@ -61,7 +61,12 @@ export interface AttachmentState {
 
 export interface DockStatusState {
     __class: RobotAttributeClass.DockStatusState;
-    metaData: Record<string, never>;
+    metaData: {
+        dryingRemainingMinutes?: number;
+        dryingProgressPercent?: number;
+        mopDockStatus?: number;
+        autoEmptyState?: number;
+    };
     value:
         | "error"
         | "idle"

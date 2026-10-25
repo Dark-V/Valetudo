@@ -16,7 +16,7 @@ class D103CNSpotCleaningCapability extends SpotCleaningCapability {
         await this.robot.refreshControlState({force: true});
         const readiness = this.robot.getControlReadiness();
         if (!readiness.ready || ![2, 3, 6, 13].includes(readiness.status)) {
-            throw new Error("Spot cleaning requires a recent idle/paused/docked state without a fault");
+            throw new Error(readiness.reason ?? "Spot cleaning requires a recent idle/paused/docked state without a fault");
         }
         const settings = await this.robot.miotHelper.readProperties([{siid: 2, piid: 3}, {siid: 4, piid: 5}]);
         const fan = settings.find(p => p.siid === 2 && p.piid === 3 && p.code === 0)?.value;

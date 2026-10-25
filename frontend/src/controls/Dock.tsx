@@ -16,6 +16,7 @@ import {
     Button,
     Grid2,
     Icon,
+    LinearProgress,
     Paper,
     styled,
     Typography
@@ -39,6 +40,7 @@ import {
     DockComponentDustbag,
 } from "../components/CustomIcons";
 import {useValetudoColorsInverse} from "../hooks/useValetudoColors";
+import {describeDockState} from "./DockStateDescription";
 
 const DockComponentTile = ({ label, icon: IconComponent, statusText, statusColor }: { label: string, icon: React.ElementType, statusText: string, statusColor: string }) => {
     return (
@@ -281,8 +283,12 @@ const Dock = (): React.ReactElement => {
         return (
             <>
                 <Typography variant="overline">
-                    {dockState}
+                    {dockStatus?.[0] ? describeDockState(dockStatus[0]) : dockState}
                 </Typography>
+                {dockState === "drying" && Number.isFinite(dockStatus?.[0]?.metaData.dryingProgressPercent) && (
+                    <LinearProgress variant="determinate" value={dockStatus?.[0]?.metaData.dryingProgressPercent}
+                        aria-label="Mop drying progress" sx={{my: 1}}/>
+                )}
 
                 {supportedComponents.length > 0 && (
                     <DockComponents
