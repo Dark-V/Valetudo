@@ -58,6 +58,10 @@ class D103CNSavedMap {
         }
         // Native 25-mm cells -> standard 5-cm display pixels. Occupied wins
         // inside each 2x2 cell so thin saved obstacles are not erased.
+        // Native ProbabilityGrid Y grows upwards (FetchGridmapROI maps
+        // increasing row indices to increasing world Y). Valetudo/canvas Y
+        // grows downwards. Reflect cell indices within the 1024-cell window;
+        // a rotation alone cannot correct this change of handedness.
         const left = Math.floor(x0 / 2), top = Math.floor(y0 / 2);
         const right = Math.floor(x1 / 2), bottom = Math.floor(y1 / 2);
         if (left < 1536 || top < 1536 || right >= 2560 || bottom >= 2560) {
@@ -81,7 +85,7 @@ class D103CNSavedMap {
                     }
                 }
                 if (known) {
-                    (occupied ? wall : floor).push(x - 1536, y - 1536);
+                    (occupied ? wall : floor).push(x - 1536, 2559 - y);
                 }
             }
         }
@@ -93,6 +97,7 @@ class D103CNSavedMap {
                 new MapLayer({type: MapLayer.TYPE.WALL, pixels: wall})], entities: [],
             metaData: {source: "D103CN saved ProbabilityGrid", savedMapSnapshot: true,
                 mapId: info.mapId, savedAt: info.savedAt, livePoseAvailable: false,
+                displayTransform: "native-x, inverted-native-y",
                 nativeResolutionMm: 25, nativeBounds: {x0: x0, y0: y0, x1: x1, y1: y1},
                 sha256: crypto.createHash("sha256").update(data).digest("hex")}});
     }
