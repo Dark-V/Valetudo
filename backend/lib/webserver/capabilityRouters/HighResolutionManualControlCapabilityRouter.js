@@ -3,6 +3,41 @@ const ValetudoManualMovementVector = require("../../entities/core/ValetudoManual
 
 class HighResolutionManualControlCapabilityRouter extends CapabilityRouter {
     initRoutes() {
+        // Model-local extension. Other robots retain their existing manual-control routes.
+        const camera = this.capability.robot.camera;
+        if (camera && typeof camera.getFrame === "function") {
+            this.router.get("/camera", (req, res) => {
+                res.set("Cache-Control", "no-store").json(camera.state());
+            });
+            this.router.put("/camera", async (req, res) => {
+                if (typeof req.body?.enabled !== "boolean" ||
+                    (req.body.bright !== undefined && typeof req.body.bright !== "boolean") ||
+                    Object.keys(req.body).some(key => !["enabled", "bright"].includes(key))) {
+                    return res.sendStatus(400);
+                }
+                try {
+                    if (req.body.enabled) {
+                        await camera.start(req.body.bright === true);
+                    } else {
+                        await camera.stop();
+                    }
+                    res.set("Cache-Control", "no-store").json(camera.state());
+                } catch (e) {
+                    this.sendErrorResponse(req, res, e);
+                }
+            });
+            this.router.get("/camera/frame.png", (req, res) => {
+                const frame = camera.getFrame();
+                res.set({"Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff"});
+                if (!frame) {
+                    return res.sendStatus(503);
+                }
+                res.set({"Content-Type": "image/png", "X-D103-Sequence": String(frame.sequence),
+                    "X-D103-Source-Ms": String(frame.sourceMs),
+                    "X-D103-Age-Ms": String(Math.round(performance.now() - frame.at))});
+                res.send(frame.png);
+            });
+        }
         this.router.get("/", async (req, res) => {
             try {
                 res.json({

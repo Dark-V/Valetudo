@@ -4,7 +4,7 @@ const {sleep} = require("../../utils/misc");
 class DreameMiotHelper {
     /**
      * @param {object} options
-     * @param {import("./DreameValetudoRobot")} options.robot
+     * @param {import("../MiioValetudoRobot")} options.robot
      * @param {number} [options.postWriteDelay]
      */
     constructor(options) {

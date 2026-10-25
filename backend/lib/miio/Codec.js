@@ -76,18 +76,13 @@ class Codec {
 
                     msg = JSON.parse(decryptedPayload.toString());
                 } catch (e) {
-                    Logger.error("Error decrypting/parsing: ", e, msg, decryptedPayload);
+                    Logger.error("Error decrypting/parsing miIO packet; private payload redacted");
                 }
             }
         } else {
             if (encryptedPayload.length > 0) {
                 //This should never happen
-                Logger.error("Invalid checksum:", {
-                    checksumFromHeader: checksumFromHeader,
-                    calculatedChecksum: calculatedChecksum,
-                    packet: rawPacket,
-                    token: this.token
-                });
+                Logger.error("Invalid miIO checksum; packet and token redacted");
             } else {
                 // If we receive an empty packet with a wrong checksum, assume that we're instead being provided a new token.
                 token = Buffer.from(header.subarray(16));
@@ -97,7 +92,7 @@ class Codec {
                     token.toString("hex") !== "00000000000000000000000000000000" &&
                     !(this.token.equals(token))
                 ) {
-                    Logger.info("Got token from handshake:", token.toString("hex"));
+                    Logger.info("Got token from handshake; value redacted");
 
                     this.setToken(token);
                 }

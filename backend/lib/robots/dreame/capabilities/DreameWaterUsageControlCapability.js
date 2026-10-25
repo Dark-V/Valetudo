@@ -1,13 +1,13 @@
 const WaterUsageControlCapability = require("../../../core/capabilities/WaterUsageControlCapability");
 
 /**
- * @extends WaterUsageControlCapability<import("../DreameValetudoRobot")>
+ * @extends WaterUsageControlCapability<import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")>
  */
 class DreameWaterUsageControlCapability extends WaterUsageControlCapability {
 
     /**
      * @param {object} options
-     * @param {import("../DreameValetudoRobot")} options.robot
+     * @param {import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")} options.robot
      * @param {Array<import("../../../entities/core/ValetudoSelectionPreset")>} options.presets
      *
      * @param {number} options.siid MIOT Service ID

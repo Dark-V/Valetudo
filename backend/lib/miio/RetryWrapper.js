@@ -99,9 +99,13 @@ class RetryWrapper {
      * @param {object} options
      * @param {number=} options.retries
      * @param {number=} options.timeout custom timeout in milliseconds
+     * @param {boolean=} options.noRetry Fail instead of queuing or replaying time-sensitive commands
      * @returns {Promise<object>}
      */
     sendMessage(msg, options = {}) {
+        if (options.noRetry === true && (!this.mutex.available(1) || !this.miioSocket.codec.stamp.isValid())) {
+            return Promise.reject(new RetryWrapperSurrenderError(msg));
+        }
         return new Promise((resolve, reject) => {
             this.mutex.take(() => {
                 this.sendMessageHelper(msg, options).then(response => {
@@ -122,6 +126,7 @@ class RetryWrapper {
      * @param {object} options
      * @param {number=} options.retries
      * @param {number=} options.timeout custom timeout in milliseconds
+     * @param {boolean=} options.noRetry Fail instead of replaying a command after timeout
      * @return {Promise<object>}
      */
     sendMessageHelper(msg, options) {
@@ -131,6 +136,10 @@ class RetryWrapper {
                 RetryWrapper.sendMessageHelperHelper(msg, options, resolve, reject)
              */
             const doRetry = () => {
+                if (options.noRetry === true) {
+                    reject(new RetryWrapperSurrenderError(msg));
+                    return;
+                }
                 this.retryHandshakeHelper(msg, options).then(() => {
                     this.sendMessageHelper(msg, options).then(response => {
                         resolve(response);
