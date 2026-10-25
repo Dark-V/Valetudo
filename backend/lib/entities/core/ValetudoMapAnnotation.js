@@ -33,6 +33,8 @@ class ValetudoMapAnnotation extends SerializableEntity {
  *
  */
 ValetudoMapAnnotation.TYPE = Object.freeze({
+    CARPET: "carpet",
+    CARPET_IGNORED: "carpet_ignored",
     THRESHOLD: "threshold",
     CURTAIN: "curtain",
 

@@ -68,6 +68,15 @@ function validMapEdit(inputs) {
         return false;
     }
     const p = jsonObject(inputs[0].value);
+    if (keysAre(p, ["cpt"]) && keysAre(p.cpt, ["addcpt", "nocpt"])) {
+        return [p.cpt.addcpt, p.cpt.nocpt].every((rows, kind) => Array.isArray(rows) && rows.length <= 20 &&
+            rows.every((row, i) => Array.isArray(row) &&
+                (kind === 0 ? [5, 6].includes(row.length) : [4, 6].includes(row.length)) &&
+                row.slice(0, 4).every(n => Number.isInteger(n) && coordinate(n)) &&
+                row[0] < row[2] && row[1] < row[3] &&
+                (kind === 0 ? row[4] === i + 1 : row.length === 4 || row[4] === 0) &&
+                (row.length < 6 || Number.isInteger(row[5]) && row[5] >= 0 && row[5] <= 255)));
+    }
     if (keysAre(p, ["msr"])) {
         return Array.isArray(p.msr) && p.msr.length === 2 && p.msr.every(segmentId) && p.msr[0] !== p.msr[1];
     }

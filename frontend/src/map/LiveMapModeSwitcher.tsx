@@ -3,6 +3,7 @@ import {
     CropSquare as ZoneModeIcon,
     Dashboard as SegmentModeIcon,
     Room as GoToModeIcon,
+    MyLocation as SpotModeIcon,
     QuestionMark as NoneModeIcon,
 } from "@mui/icons-material";
 import React from "react";
@@ -48,6 +49,7 @@ const modeToIcon: Record<LiveMapMode, React.ReactElement> = {
     "segments": <SegmentModeIcon/>,
     "zones": <ZoneModeIcon/>,
     "goto": <GoToModeIcon/>,
+    "spot": <SpotModeIcon/>,
     "none": <NoneModeIcon/>
 };
 
@@ -55,6 +57,7 @@ const modeToLabel: Record<LiveMapMode, string> = {
     "segments": "Segments",
     "zones": "Zones",
     "goto": "Go To",
+    "spot": "Spot",
     "none": "None"
 };
 

@@ -16,18 +16,24 @@ import MapActionsCombinedActionsMenuPopoverButton from "../../MapActionsCombined
 import ThresholdClientStructure from "../../structures/client_structures/ThresholdClientStructure";
 import CurtainClientStructure from "../../structures/client_structures/CurtainClientStructure";
 import RampClientStructure from "../../structures/client_structures/RampClientStructure";
+import CarpetClientStructure from "../../structures/client_structures/CarpetClientStructure";
+import IgnoredCarpetClientStructure from "../../structures/client_structures/IgnoredCarpetClientStructure";
 
 interface MapAnnotationActionsProperties {
     robotStatus: StatusState,
     thresholds: Array<ThresholdClientStructure>,
     curtains: Array<CurtainClientStructure>,
     ramps: Array<RampClientStructure>,
+    carpets: Array<CarpetClientStructure>,
+    ignoredCarpets: Array<IgnoredCarpetClientStructure>,
 
     convertPixelCoordinatesToCMSpace(coordinates: PointCoordinates) : PointCoordinates
 
     onAddThreshold(): void,
     onAddCurtain(): void,
     onAddRamp(): void,
+    onAddCarpet(): void,
+    onAddIgnoredCarpet(): void,
 
     onSave(): void;
     onRefresh(): void;
@@ -41,6 +47,8 @@ const MapAnnotationActions = (
         thresholds,
         curtains,
         ramps,
+        carpets,
+        ignoredCarpets,
 
         convertPixelCoordinatesToCMSpace,
 
@@ -48,6 +56,8 @@ const MapAnnotationActions = (
         onAddThreshold,
         onAddCurtain,
         onAddRamp,
+        onAddCarpet,
+        onAddIgnoredCarpet,
 
         onSave,
         onRefresh,
@@ -132,8 +142,21 @@ const MapAnnotationActions = (
             });
         });
 
+        for (const [areas, type] of [
+            [carpets, ValetudoMapAnnotationType.Carpet],
+            [ignoredCarpets, ValetudoMapAnnotationType.CarpetIgnored]
+        ] as const) {
+            for (const area of areas) {
+                mapAnnotations.push({type: type,
+                    points: [
+                        convertPixelCoordinatesToCMSpace({x: area.x0, y: area.y0}),
+                        convertPixelCoordinatesToCMSpace({x: area.x2, y: area.y2})
+                    ], metaData: {carpetType: area.carpetType}
+                });
+            }
+        }
         saveAnnotations(mapAnnotations);
-    }, [canEdit, saveAnnotations, thresholds, curtains, ramps, convertPixelCoordinatesToCMSpace]);
+    }, [canEdit, saveAnnotations, thresholds, curtains, ramps, carpets, ignoredCarpets, convertPixelCoordinatesToCMSpace]);
 
     if (mapAnnotationsPropertiesLoadError) {
         return (
@@ -205,6 +228,20 @@ const MapAnnotationActions = (
                 >
                     {(close) => (
                         <>
+                            {mapAnnotationsProperties.supportedAnnotationTypes.includes(ValetudoMapAnnotationType.Carpet) &&
+                                <ActionButton color="inherit" size="medium" variant="extended"
+                                    onClick={() => {
+                                        onAddCarpet(); close();
+                                    }}>
+                                    <AddIcon/> Carpet ({carpets.length})
+                                </ActionButton>}
+                            {mapAnnotationsProperties.supportedAnnotationTypes.includes(ValetudoMapAnnotationType.CarpetIgnored) &&
+                                <ActionButton color="inherit" size="medium" variant="extended"
+                                    onClick={() => {
+                                        onAddIgnoredCarpet(); close();
+                                    }}>
+                                    <AddIcon/> Not a carpet ({ignoredCarpets.length})
+                                </ActionButton>}
                             {
                                 mapAnnotationsProperties.supportedAnnotationTypes.includes(ValetudoMapAnnotationType.Threshold) &&
                                 <ActionButton
@@ -260,7 +297,7 @@ const MapAnnotationActions = (
                     <ActionButton
                         color="inherit"
                         size="medium"
-                        disabled={thresholds.length === 0 && curtains.length === 0 && ramps.length === 0}
+                        disabled={thresholds.length === 0 && curtains.length === 0 && ramps.length === 0 && carpets.length === 0 && ignoredCarpets.length === 0}
                         variant="extended"
                         onClick={onClear}
                     >

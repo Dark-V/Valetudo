@@ -163,7 +163,7 @@ class StructureManager {
                     }
 
                     mapStructures.push(new CarpetMapStructure(
-                        points
+                        points, e.metaData.ignored === true
                     ));
                     break;
                 }

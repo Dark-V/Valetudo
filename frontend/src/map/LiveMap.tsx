@@ -7,20 +7,22 @@ import SegmentLabelMapStructure from "./structures/map_structures/SegmentLabelMa
 import ZoneActions from "./actions/live_map_actions/ZoneActions";
 import ZoneClientStructure from "./structures/client_structures/ZoneClientStructure";
 import GoToActions from "./actions/live_map_actions/GoToActions";
+import SpotActions from "./actions/live_map_actions/SpotActions";
 import {TapTouchHandlerEvent} from "./utils/touch_handling/events/TapTouchHandlerEvent";
 import React from "react";
 import {LiveMapModeSwitcher} from "./LiveMapModeSwitcher";
-import {Button, Dialog, DialogActions, DialogContent, DialogTitle} from "@mui/material";
+import {Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle} from "@mui/material";
 
 
-export type LiveMapMode = "segments" | "zones" | "goto" | "none";
+export type LiveMapMode = "segments" | "zones" | "goto" | "spot" | "none";
 const LIVE_MAP_MODE_LOCAL_STORAGE_KEY = "live-map-mode";
 
 interface LiveMapProps extends MapProps {
     supportedCapabilities: {
         [Capability.MapSegmentation]: boolean,
         [Capability.ZoneCleaning]: boolean,
-        [Capability.GoToLocation]: boolean
+        [Capability.GoToLocation]: boolean,
+        [Capability.SpotCleaning]: boolean
     }
 }
 
@@ -46,6 +48,9 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
         }
         if (props.supportedCapabilities[Capability.GoToLocation]) {
             this.supportedModes.push("goto");
+        }
+        if (props.supportedCapabilities[Capability.SpotCleaning]) {
+            this.supportedModes.push("spot");
         }
 
         let modeIdxToUse = 0;
@@ -122,6 +127,7 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
                 break;
             }
 
+            case "spot":
             case "goto": {
                 if (
                     this.structureManager.getClientStructures().filter(s => {
@@ -162,8 +168,15 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
     }
 
     render(): React.ReactElement {
+        const PointActions = this.state.mode === "spot" ? SpotActions : GoToActions;
         return (
             <MapContainer style={{overflow: "hidden"}}>
+                {this.props.rawMap.metaData.savedMapSnapshot === true && <Alert severity="info"
+                    sx={{position: "absolute", top: 8, left: 8, right: 8, zIndex: 2, pointerEvents: "none"}}>
+                    Saved device map #{String(this.props.rawMap.metaData.mapId)} — not live.
+                    {this.props.rawMap.metaData.savedAt && ` Saved ${new Date(this.props.rawMap.metaData.savedAt).toLocaleString()}.`}
+                    Robot position and cleaning path are not available in this snapshot.
+                </Alert>}
                 <canvas
                     ref={this.canvasRef}
                     style={{
@@ -277,9 +290,9 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
                         />
                     }
                     {
-                        this.state.mode === "goto" &&
+                        (this.state.mode === "goto" || this.state.mode === "spot") &&
 
-                        <GoToActions
+                        <PointActions
                             goToTarget={this.state.goToTarget}
                             convertPixelCoordinatesToCMSpace={(coordinates => {
                                 return this.structureManager.convertPixelCoordinatesToCMSpace(coordinates);

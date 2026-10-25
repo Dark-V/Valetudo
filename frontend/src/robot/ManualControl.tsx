@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import {
     Box,
+    Alert,
     FormControlLabel,
     Skeleton,
     Switch,
@@ -21,6 +23,7 @@ import {
     ValetudoManualMovementVector,
     ManualControlInteraction,
     HighResolutionManualControlInteraction,
+    valetudoAPIBaseURL,
 } from "../api";
 import { useCapabilitiesSupported } from "../CapabilitiesProvider";
 import PaperContainer from "../components/PaperContainer";
@@ -31,6 +34,7 @@ import { InputModeToggle } from "./manual_control/InputModeToggle";
 import { KeyboardInput } from "./manual_control/KeyboardInput";
 import { DPadInput } from "./manual_control/DPadInput";
 import { ControllerVisual } from "./manual_control/ControllerVisual";
+import D103Camera from "./D103Camera";
 
 function ModeSwitchReset({ mode }: { mode: InputMode }) {
     const { resetState } = useVirtualController();
@@ -52,21 +56,24 @@ const HighResolutionControlToggle = () => {
     const { mutate: sendInteraction, isPending: toggleInteracting } = useHighResolutionManualControlInteraction();
 
     return (
-        <FormControlLabel
-            control={
-                <Switch
-                    checked={manualControlState?.enabled || false}
-                    disabled={manualControlStatePending || toggleInteracting}
-                    onChange={(e) => {
-                        sendInteraction({
-                            action: e.target.checked ? "enable" : "disable",
-                        });
-                    }}
-                />
-            }
-            label="Enable manual control"
-            style={{ marginLeft: 0 }}
-        />
+        <Box>
+            {manualControlState?.error && <Alert severity="error">{manualControlState.error}</Alert>}
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={manualControlState?.enabled || false}
+                        disabled={manualControlStatePending || toggleInteracting}
+                        onChange={(e) => {
+                            sendInteraction({
+                                action: e.target.checked ? "enable" : "disable",
+                            });
+                        }}
+                    />
+                }
+                label="Enable manual control"
+                style={{ marginLeft: 0 }}
+            />
+        </Box>
     );
 };
 
@@ -238,6 +245,23 @@ const ManualControl = (): React.ReactElement => {
 
     const {data: cameraProperties} = useDuststreamingPropertiesQuery();
     const {data: cameraConfiguration} = useDuststreamingConfigurationQuery();
+    const [liveCameraAvailable, setLiveCameraAvailable] = useState(false);
+    useEffect(() => {
+        if (!highResSupported) {
+            return;
+        }
+        let cancelled = false;
+        void axios.get(`${valetudoAPIBaseURL}/robot/capabilities/${Capability.HighResolutionManualControl}/properties`)
+            .then(response => {
+                if (!cancelled) {
+                    setLiveCameraAvailable(response.data.liveCamera === true);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [highResSupported]);
 
     const cameraEnabled = cameraConfiguration?.enabled === true;
 
@@ -269,6 +293,7 @@ const ManualControl = (): React.ReactElement => {
                 overflow: "hidden",
             }}
         >
+            {liveCameraAvailable && <D103Camera/>}
             {cameraEnabled && cameraProperties && (
                 <Box sx={{
                     position: "relative",

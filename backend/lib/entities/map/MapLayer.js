@@ -28,6 +28,7 @@ class MapLayer extends SerializableEntity {
      * @param {string} [options.metaData.name]
      * @param {boolean} [options.metaData.active]
      * @param {MapLayerMaterial} [options.metaData.material]
+     * @param {Array<number>} [options.metaData.carpetPixels] Native carpet mask in this layer's pixel coordinates
      */
     constructor(options) {
         super(options);

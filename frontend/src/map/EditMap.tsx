@@ -17,6 +17,8 @@ import ThresholdClientStructure from "./structures/client_structures/ThresholdCl
 import MapAnnotationActions from "./actions/edit_map_actions/MapAnnotationActions";
 import CurtainClientStructure from "./structures/client_structures/CurtainClientStructure";
 import RampClientStructure from "./structures/client_structures/RampClientStructure";
+import CarpetClientStructure from "./structures/client_structures/CarpetClientStructure";
+import IgnoredCarpetClientStructure from "./structures/client_structures/IgnoredCarpetClientStructure";
 
 export type mode = "segments" | "virtual_restrictions" | "annotations";
 
@@ -48,6 +50,8 @@ interface EditMapState extends MapState {
     thresholds: Array<ThresholdClientStructure>,
     curtains: Array<CurtainClientStructure>,
     ramps: Array<RampClientStructure>,
+    carpets: Array<CarpetClientStructure>,
+    ignoredCarpets: Array<IgnoredCarpetClientStructure>,
 
     helpDialogOpen: boolean
 }
@@ -76,6 +80,8 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
             thresholds: [],
             curtains: [],
             ramps: [],
+            carpets: [],
+            ignoredCarpets: [],
 
             helpDialogOpen: false
         };
@@ -204,6 +210,8 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
                     return true;
                 }
             }) as Array<RampClientStructure>,
+            carpets: this.structureManager.getClientStructures().filter(s => s.type === CarpetClientStructure.TYPE) as CarpetClientStructure[],
+            ignoredCarpets: this.structureManager.getClientStructures().filter(s => s.type === IgnoredCarpetClientStructure.TYPE) as IgnoredCarpetClientStructure[],
         });
     }
 
@@ -274,6 +282,8 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
             this.structureManager.getClientStructures().forEach(s => {
                 switch (s.type) {
                     case ThresholdClientStructure.TYPE:
+                    case CarpetClientStructure.TYPE:
+                    case IgnoredCarpetClientStructure.TYPE:
                         this.structureManager.removeClientStructure(s);
                         break;
                     case CurtainClientStructure.TYPE:
@@ -287,6 +297,18 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
         } else {
             this.props.rawMap.entities.forEach(e => {
                 switch (e.type) {
+                    case RawMapEntityType.Carpet: {
+                        if (!["manual", "ignored"].includes(e.metaData.source ?? "") || e.points.length < 6) {
+                            break;
+                        }
+                        const p0 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
+                        const p1 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[4], y: e.points[5]});
+                        const Shape = e.metaData.source === "ignored" ? IgnoredCarpetClientStructure : CarpetClientStructure;
+                        const shape = new Shape(p0.x, p0.y, p1.x, p0.y, p1.x, p1.y, p0.x, p1.y, false);
+                        shape.carpetType = e.metaData.carpetType;
+                        this.structureManager.addClientStructure(shape);
+                        break;
+                    }
                     case RawMapEntityType.Threshold: {
                         const p0 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
                         const p1 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[2], y: e.points[3]});
@@ -347,6 +369,17 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
         this.updateState();
 
         this.redrawLayers();
+    }
+
+    private addCarpetRegion(ignored: boolean): void {
+        const center = this.getCurrentViewportCenterCoordinatesInPixelSpace();
+        const Shape = ignored ? IgnoredCarpetClientStructure : CarpetClientStructure;
+        this.structureManager.addClientStructure(new Shape(
+            center.x - 15, center.y - 15, center.x + 15, center.y - 15,
+            center.x + 15, center.y + 15, center.x - 15, center.y + 15, true
+        ));
+        this.updateState();
+        this.draw();
     }
 
     protected onMapUpdate() : void {
@@ -616,6 +649,10 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
                             thresholds={this.state.thresholds}
                             curtains={this.state.curtains}
                             ramps={this.state.ramps}
+                            carpets={this.state.carpets}
+                            ignoredCarpets={this.state.ignoredCarpets}
+                            onAddCarpet={() => this.addCarpetRegion(false)}
+                            onAddIgnoredCarpet={() => this.addCarpetRegion(true)}
 
                             convertPixelCoordinatesToCMSpace={(coordinates => {
                                 return this.structureManager.convertPixelCoordinatesToCMSpace(coordinates);

@@ -11,16 +11,21 @@ export function MovementSampler({
     const { state, resetState } = useVirtualController();
     const stateRef = useRef(state);
     stateRef.current = state;
+    const enabledRef = useRef(enabled);
+    enabledRef.current = enabled;
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isActiveRef = useRef(false);
     const queueRef = useRef({
         busy: false,
-        pending: null as VirtualControllerState | null,
+        pending: null as {vector: VirtualControllerState; at: number} | null,
     });
 
     const trySend = useCallback((vector: VirtualControllerState) => {
+        if (!enabledRef.current) {
+            return;
+        }
         if (queueRef.current.busy) {
-            queueRef.current.pending = vector;
+            queueRef.current.pending = {vector: vector, at: performance.now()};
         } else {
             queueRef.current.busy = true;
 
@@ -28,14 +33,17 @@ export function MovementSampler({
                 try {
                     await sendMoveCommand(vector);
                 } catch {
-                    // intentionally ignored
+                    queueRef.current.pending = null;
                 }
                 queueRef.current.busy = false;
 
                 if (queueRef.current.pending !== null) {
                     const next = queueRef.current.pending;
                     queueRef.current.pending = null;
-                    trySend(next);
+                    const stop = next.vector.velocity === 0 && next.vector.angle === 0;
+                    if (enabledRef.current && (stop || performance.now() - next.at < 300)) {
+                        trySend(next.vector);
+                    }
                 }
             })();
         }
@@ -61,17 +69,18 @@ export function MovementSampler({
     }, []);
 
     useEffect(() => {
-        if (state.velocity !== 0 || state.angle !== 0) {
+        if (enabled && (state.velocity !== 0 || state.angle !== 0)) {
             startInterval();
         } else if (isActiveRef.current) {
             stopInterval();
             trySend({ velocity: 0, angle: 0 });
         }
-    }, [state, startInterval, stopInterval, trySend]);
+    }, [enabled, state, startInterval, stopInterval, trySend]);
 
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.hidden) {
+                queueRef.current.pending = null;
                 stopInterval();
                 resetState();
             }
@@ -84,6 +93,7 @@ export function MovementSampler({
 
     useEffect(() => {
         if (!enabled) {
+            queueRef.current.pending = null;
             stopInterval();
             resetState();
         }
@@ -91,6 +101,8 @@ export function MovementSampler({
 
     useEffect(() => {
         return () => {
+            enabledRef.current = false;
+            queueRef.current.pending = null;
             stopInterval();
         };
     }, [stopInterval]);

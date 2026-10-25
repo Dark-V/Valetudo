@@ -17,6 +17,7 @@ export enum Capability {
     FanSpeedControl = "FanSpeedControlCapability",
     FloorMaterialDirectionAwareNavigationControl = "FloorMaterialDirectionAwareNavigationControlCapability",
     GoToLocation = "GoToLocationCapability",
+    SpotCleaning = "SpotCleaningCapability",
     KeyLock = "KeyLockCapability",
     Locate = "LocateCapability",
     ManualControl = "ManualControlCapability",
@@ -58,6 +59,11 @@ export type Point = {
     x: number;
     y: number;
 };
+
+export interface SpotActionRequestParameters {
+    coordinates: Point;
+    iterations?: number;
+}
 
 export interface Zone {
     points: {
@@ -428,6 +434,7 @@ export interface LogLine {
 
 export interface SimpleToggleState {
     enabled: boolean;
+    error?: string | null;
 }
 
 export interface SpeakerVolumeState {
@@ -646,6 +653,8 @@ export interface MopDockMopWashTemperatureProperties {
 }
 
 export enum ValetudoMapAnnotationType {
+    Carpet = "carpet",
+    CarpetIgnored = "carpet_ignored",
     Threshold = "threshold",
     Curtain = "curtain",
 
@@ -653,6 +662,7 @@ export enum ValetudoMapAnnotationType {
 }
 
 export interface ValetudoMapAnnotation {
+    metaData?: {carpetType?: number},
     type: ValetudoMapAnnotationType,
     points: Array<Point>
 }

@@ -36,6 +36,7 @@ const options = {
             {name: "WifiConfigurationCapability", description: "Wi-Fi configuration capability"},
             {name: "WifiScanCapability", description: "Wi-Fi scan capability"},
             {name: "ZoneCleaningCapability", description: "Zone cleaning capability"},
+            {name: "SpotCleaningCapability", description: "Native spot cleaning capability"},
             {name: "MapSegmentationCapability", description: "Map segment cleaning capability"},
             {name: "ManualControlCapability", description: "Manual control capability"},
             {name: "DoNotDisturbCapability", description: "Do-not-disturb configuration capability"},
