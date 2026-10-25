@@ -17,6 +17,7 @@ const Logger = require("../../Logger");
 const MiioSocket = require("../../miio/MiioSocket");
 const MiioValetudoRobot = require("../MiioValetudoRobot");
 const QuirksCapability = require("../../core/capabilities/QuirksCapability");
+const registerFeatureCapabilities = require("./D103CNFeatureCapabilities");
 const ValetudoRobotError = require("../../entities/core/ValetudoRobotError");
 const ValetudoSelectionPreset = require("../../entities/core/ValetudoSelectionPreset");
 
@@ -70,7 +71,9 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             this.registerCapability(new capabilities.DreameCollisionAvoidantNavigationControlCapability({robot: dreame}));
             const quirkFactory = new DreameQuirkFactory({robot: dreame});
             this.registerCapability(new QuirksCapability({robot: this, quirks: [
-                quirkFactory.getQuirk(DreameQuirkFactory.KNOWN_QUIRKS.EDGE_EXTENSION_FREQUENCY)
+                quirkFactory.getQuirk(DreameQuirkFactory.KNOWN_QUIRKS.EDGE_EXTENSION_FREQUENCY),
+                quirkFactory.getQuirk(DreameQuirkFactory.KNOWN_QUIRKS.CARPET_MODE_SENSITIVITY),
+                quirkFactory.getQuirk(DreameQuirkFactory.KNOWN_QUIRKS.CARPET_DETECTION_AUTO_DEEP_CLEANING)
             ]}));
             this.registerCapability(new D103CNOperationModeControlCapability({
                 robot: this, presets: Object.entries(D103.OPERATION_MODES).map(([name, value]) =>
@@ -89,11 +92,12 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                 presets: WATER_PRESETS.map((name, index) => new ValetudoSelectionPreset({name: name, value: index + 1}))
             }));
             this.registerCapability(new capabilities.DreameSpeakerVolumeControlCapability({robot: this, siid: 7, piid: 1}));
+            registerFeatureCapabilities(this);
             if (this.implConfig.allowManualControl === true) {
                 this.registerCapability(new D103CNHighResolutionManualControlCapability({robot: this}));
             }
         }
-        // No inherited Gen2 auto-writes, reset, voice-pack, Wi-Fi reconfiguration, dock or camera controls.
+        // No inherited Gen2 startup auto-writes. Jobs/map edits/settings require explicit API requests.
     }
 
     setEmbeddedParameters() {
@@ -131,12 +135,23 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
         // State/control uses the already verified local interface. A connected UDP socket is not auth proof.
         const prepare = method === "action" && ((args.siid === 2 && args.aiid === 1) ||
-            (args.siid === 3 && args.aiid === 1)) ? this.camera.stop() : Promise.resolve();
+            (args.siid === 3 && args.aiid === 1) || (args.siid === 4 && args.aiid === 1)) ? this.camera.stop() : Promise.resolve();
         const isManual = method === "set_properties" && Array.isArray(args) &&
             args.length === 1 && args[0].siid === 4 && args[0].piid === 15;
         return prepare.then(() => isManual ? this.sendManualTransport(method, args, options.timeout ?? 350) :
             super.sendCommand(method, args,
-                {...options, interface: method === "action" && args.siid === 6 ? "cloud" : "local"}))
+                {...options, interface: method === "action" && args.siid === 6 && args.aiid === 1 ? "cloud" : "local"}))
+            .then(result => {
+                // Several upstream map capabilities otherwise silently return
+                // success when an incompatible firmware omits the action result.
+                if (method === "action" && args.siid === 6 && args.aiid === 2 &&
+                    (result?.code !== 0 || !Array.isArray(result.out) || result.out.length !== 1 ||
+                        result.siid !== 6 || result.aiid !== 2 ||
+                        result.out[0].piid !== 6 || !Number.isInteger(result.out[0].value))) {
+                    throw new Error("D103CN: invalid map edit acknowledgement");
+                }
+                return result;
+            })
             .catch(e => {
                 const reason = e?.constructor?.name === "MiioTimeoutError" ? "timeout" :
                     e?.constructor?.name === "RetryWrapperSurrenderError" ? "telemetry channel busy or stamp invalid" : "request rejected";
@@ -316,9 +331,16 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                 type: attrs.PresetSelectionStateAttribute.TYPE.OPERATION_MODE, value: parsed.operationMode
             }));
         }
-        for (const [raw, presets, type] of [[parsed.fan, FAN_PRESETS, "fan_speed"], [parsed.water - 1, WATER_PRESETS, "water_grade"]]) {
-            if (presets[raw]) {
-                this.state.upsertFirstMatchingAttribute(new attrs.PresetSelectionStateAttribute({type: type, value: presets[raw]}));
+        for (const [raw, index, presets, type] of [
+            [parsed.fan, parsed.fan, FAN_PRESETS, "fan_speed"],
+            [parsed.water, parsed.water - 1, WATER_PRESETS, "water_grade"]
+        ]) {
+            if (presets[index]) {
+                // The upstream room/zone encoders reuse the native setting,
+                // not the display preset name or a fallback medium value.
+                this.state.upsertFirstMatchingAttribute(new attrs.PresetSelectionStateAttribute({
+                    type: type, value: presets[index], metaData: {rawValue: raw}
+                }));
             }
         }
         if (parsed.dock) {
