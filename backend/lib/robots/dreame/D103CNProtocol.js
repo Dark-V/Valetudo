@@ -23,6 +23,13 @@ function withOperationMode(value, preset) {
     }
     return value - value % 256 + OPERATION_MODES[preset];
 }
+
+// Upstream DreameGen2 maps 68 to a docked mop-attachment reminder.
+// Require both a known stationary dock state and actual charging here;
+// do not suppress it during navigation/cleaning or discard other faults.
+function isDockMopReminder(status, fault, charging) {
+    return fault === 68 && charging === 1 && [6, 8, 9, 13, 20, 21, 22, 30].includes(status);
+}
 const BASIC_ACTIONS = Object.freeze([[2, 1], [2, 2], [4, 2], [3, 1]]);
 // Public MIOT action IDs; intentionally NOT advertised as working dock capabilities yet.
 const DOCK_ACTIONS = Object.freeze([[2, 4], [2, 6], [2, 8], [2, 9], [2, 10]]);
@@ -134,19 +141,22 @@ function summarizeState(properties) {
     const stateMap = {
         1: "cleaning", 2: "idle", 3: "paused", 4: "error", 5: "returning", 6: "docked",
         7: "cleaning", 8: "docked", 9: "docked", 10: "returning", 11: "moving",
-        12: "cleaning", 13: "docked", 14: "idle", 19: "idle", 21: "docked",
+        12: "cleaning", 13: "docked", 14: "idle", 19: "idle", 20: "docked", 21: "docked",
         22: "docked", 23: "manual_control", 30: "docked"
     };
     const fault = values.get("2/2");
     const level = values.get("3/1");
     const charging = values.get("3/2");
+    const mopReminder = isDockMopReminder(status, fault, charging);
+    const activeFault = fault > 0 && !mopReminder ? fault : undefined;
     return {
         status: status === undefined ? undefined : {
-            value: fault > 0 ? "error" : stateMap[status] ?? "error",
+            value: activeFault ? "error" : stateMap[status] ?? "error",
             flag: status === 11 ? "mapping" : "none",
             metaData: {miotStatus: status, workMode: values.get("4/1"),
-                unmapped: stateMap[status] === undefined, upgrading: status === 14},
-            fault: fault > 0 ? fault : undefined
+                unmapped: stateMap[status] === undefined, upgrading: status === 14,
+                nativeFault: fault, mopAttachmentReminder: mopReminder},
+            fault: activeFault
         },
         battery: level >= 0 && level <= 100 ? {
             level: level, flag: charging === 1 ? (level === 100 ? "charged" : "charging") :
@@ -154,10 +164,11 @@ function summarizeState(properties) {
         } : undefined,
         fan: values.get("2/3"), water: values.get("4/5"), operationMode: operationMode(values.get("4/23")),
         dock: status === undefined || stateMap[status] === undefined ? undefined :
-            ({8: "drying", 9: "cleaning", 21: "pause", 22: "emptying", 30: "cleaning"})[status] ?? "idle",
+            ({8: "drying", 9: "cleaning", 20: "cleaning", 21: "pause", 22: "emptying", 30: "cleaning"})[status] ?? "idle",
         // No speculative conversion of clean_area to cm²: retain its raw value for diagnostics.
         diagnostics: {cleanTimeMinutes: values.get("4/2"), cleanAreaRaw: values.get("4/3"),
-            washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23")}
+            washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23"),
+            faultRaw: fault, dockMopReminder: mopReminder}
     };
 }
 
@@ -203,6 +214,7 @@ function decodeMapEnvelope(input, options = {}) {
 module.exports = {READ_PROPERTIES: READ_PROPERTIES, BASIC_ACTIONS: BASIC_ACTIONS, DOCK_ACTIONS: DOCK_ACTIONS,
     OPERATION_MODES: OPERATION_MODES, validCleanSettings: validCleanSettings,
     operationMode: operationMode, withOperationMode: withOperationMode,
+    isDockMopReminder: isDockMopReminder,
     MANUAL_LIMITS: MANUAL_LIMITS, manualPayload: manualPayload, validManualPayload: validManualPayload,
     normalizeSecret: normalizeSecret, parseDeviceId: parseDeviceId,
     matchesModel: matchesModel, commandAllowed: commandAllowed, summarizeState: summarizeState, decodeMapEnvelope: decodeMapEnvelope};

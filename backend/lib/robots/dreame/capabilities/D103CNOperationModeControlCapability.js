@@ -25,7 +25,7 @@ class D103CNOperationModeControlCapability extends OperationModeControlCapabilit
             const readiness = this.robot.getControlReadiness();
             // Mode selection is a settings write, not manual driving. A dock's
             // drying cycle does not prevent preparing the next cleaning mode.
-            if (readiness.fault !== 0 || readiness.ageMs === null || readiness.ageMs > 2000 ||
+            if (readiness.effectiveFault !== 0 || readiness.ageMs === null || readiness.ageMs > 2000 ||
                 ![2, 6, 8, 13].includes(readiness.status) || this.robot.camera.state().running) {
                 throw new Error("Stop the current task and camera before changing the cleaning mode");
             }

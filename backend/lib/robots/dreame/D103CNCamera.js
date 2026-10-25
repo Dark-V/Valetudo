@@ -60,7 +60,7 @@ class D103CNCamera {
             throw new Error("Bright camera while driving requires explicit experimental-mode approval");
         }
         const readiness = this.robot.getControlReadiness();
-        if (!readiness.ready) {
+        if (!readiness.cameraReady) {
             throw new Error(`Camera not ready: status=${readiness.status}, fault=${readiness.fault}, ageMs=${readiness.ageMs}`);
         }
         this.frame = null;
@@ -136,9 +136,9 @@ class D103CNCamera {
             const manualNow = this.robot.capabilities.HighResolutionManualControlCapability;
             const readinessNow = this.robot.getControlReadiness();
             const reason = (ready && now - this.lastRequest > 5000) ? "Viewer lease expired" :
-                readinessNow.fault !== 0 ? `Robot fault ${readinessNow.fault}` :
+                readinessNow.effectiveFault !== 0 ? `Robot fault ${readinessNow.fault}` :
                     (readinessNow.ageMs === null || readinessNow.ageMs > 10000) ? "Robot telemetry expired" :
-                        (!manualNow?.active && ![2, 3, 6, 13, 21, 23].includes(statusNow)) ? `Robot status changed to ${statusNow}` :
+                        (!manualNow?.active && ![2, 3, 6, 8, 13, 21, 23].includes(statusNow)) ? `Robot status changed to ${statusNow}` :
                             (this.frame ? now - this.frame.at > 5000 : now - this.waitingSince > 10000) ? "Fresh camera frames timed out" : null;
             if (reason) {
                 this.error = reason;

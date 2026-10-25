@@ -133,7 +133,13 @@ class RobotRouter {
                 maxClients: 5
             }),
             (req, res) => {
-                //Intentional, as the response will be handled by the SSEMiddleware
+                // A saved map can change just once at the end of a clean. If
+                // Wi-Fi dropped then, replay the current snapshot on reconnect
+                // rather than leaving this viewer stale until the next save.
+                if (this.robot.state.map.metaData.savedMapSnapshot === true) {
+                    const eventResponse = /** @type {import("express").Response & {sse: {write: (data: string) => void}}} */ (res);
+                    eventResponse.sse.write(`event: ${ValetudoRobot.EVENTS.MapUpdated}\ndata: ${JSON.stringify(this.robot.state.map)}\n\n`);
+                }
             }
         );
     }

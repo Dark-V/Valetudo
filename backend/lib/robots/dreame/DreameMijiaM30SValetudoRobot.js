@@ -211,11 +211,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             return this.controlPollInFlight;
         }
         this.controlPollInFlight = (async () => {
-            const response = await this.sendCommand("get_properties", [1, 2].map(piid => ({
-                did: this.deviceId, siid: 2, piid: piid
+            const response = await this.sendCommand("get_properties", [[2, 1], [2, 2], [3, 2]].map(([siid, piid]) => ({
+                did: this.deviceId, siid: siid, piid: piid
             })), {timeout: 700, noRetry: options.noRetry ?? true});
-            if (!Array.isArray(response) || ![1, 2].every(piid => response.some(p =>
-                p?.siid === 2 && p.piid === piid && p.code === 0 && Number.isInteger(p.value) && p.value >= 0))) {
+            if (!Array.isArray(response) || ![[2, 1], [2, 2], [3, 2]].every(([siid, piid]) => response.some(p =>
+                p?.siid === siid && p.piid === piid && p.code === 0 && Number.isInteger(p.value) && p.value >= 0))) {
                 throw new Error("D103CN status/fault readback is incomplete");
             }
             this.parseAndUpdateState(response);
@@ -254,10 +254,15 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     getControlReadiness() {
         const status = this.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
         const fault = this.d103State.find(p => p.siid === 2 && p.piid === 2)?.value;
+        const charging = this.d103State.find(p => p.siid === 3 && p.piid === 2)?.value;
+        const dockMopReminder = D103.isDockMopReminder(status, fault, charging);
+        const effectiveFault = dockMopReminder ? 0 : fault;
         const age = performance.now() - Math.min(this.lastStateAt, this.lastFaultAt);
-        return {status: status ?? null, fault: fault ?? null,
+        return {status: status ?? null, fault: fault ?? null, effectiveFault: effectiveFault ?? null,
+            dockMopReminder: dockMopReminder,
             ageMs: Number.isFinite(age) ? Math.round(age) : null,
-            ready: fault === 0 && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000,
+            ready: effectiveFault === 0 && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000,
+            cameraReady: effectiveFault === 0 && [2, 3, 6, 8, 13, 21, 23].includes(status) && age <= 10000,
             refreshError: age <= 2000 ? null : this.lastControlPollError};
     }
 
