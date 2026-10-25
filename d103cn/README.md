@@ -27,6 +27,7 @@ not a claim that each intermediate source tree reproduces its original frontend.
   successfully. Physical mop lift over a carpet remains unverified.
 - Drying duration was changed and restored with native readback. MQTT's actual
   broker delivery and full robot reboot/autostart remain separate pending tests.
+- Station operations are visible even without manual dock-action buttons: mop washing, drying and dust collection. Native drying countdown/progress, API/SSE delivery and browser display were verified on the robot; the existing drying job and stock AVA continued uninterrupted. Washing/emptying phases still need direct observation.
 - Experimental leased **monochrome navigation camera**, not an RGB camera.
   Camera helpers restore the original exposure and do not open `/dev/video1`.
 - Real Valetudo stop/restart restored the stock SDK/agent and resumed live maps.
