@@ -1,5 +1,6 @@
 const express = require("express");
 const os = require("os");
+const ThermalHistory = require("../utils/ThermalHistory");
 const Tools = require("../utils/Tools");
 
 class SystemRouter {
@@ -11,12 +12,17 @@ class SystemRouter {
     constructor(options) {
         this.router = express.Router({mergeParams: true});
         this.phoenixManager = options.phoenixManager;
+        this.thermalHistory = new ThermalHistory();
 
         this.initRoutes();
     }
 
 
     initRoutes() {
+        this.router.get("/host/thermal", (req, res) => {
+            res.json(this.thermalHistory.snapshot());
+        });
+
         this.router.get("/host/info", async (req, res) => {
             const systemStats = await Tools.GET_SYSTEM_STATS();
 
@@ -49,6 +55,10 @@ class SystemRouter {
 
     getRouter() {
         return this.router;
+    }
+
+    shutdown() {
+        this.thermalHistory.shutdown();
     }
 }
 

@@ -37,6 +37,7 @@ import {
     fetchSpeakerVolumeState,
     fetchStateAttributes,
     fetchSystemHostInfo,
+    fetchThermalHistory,
     fetchSystemRuntimeInfo,
     fetchTimerInformation,
     fetchTimerProperties,
@@ -219,6 +220,7 @@ enum QueryKey {
     SpeakerVolume = "speaker_volume",
     VoicePackManagement = "voice_pack",
     SystemHostInfo = "system_host_info",
+    ThermalHistory = "thermal_history",
     SystemRuntimeInfo = "system_runtime_info",
     MQTTConfiguration = "mqtt_configuration",
     MQTTStatus = "mqtt_status",
@@ -807,6 +809,16 @@ export const useSystemHostInfoQuery = () => {
 
         staleTime: 5_000,
         refetchInterval: 5_000
+    });
+};
+
+export const useThermalHistoryQuery = () => {
+    return useQuery({
+        queryKey: [QueryKey.ThermalHistory],
+        queryFn: fetchThermalHistory,
+        staleTime: 10000,
+        refetchInterval: 10000,
+        retry: 1
     });
 };
 

@@ -30,12 +30,9 @@ import {
     SystemUpdateAlt as UpdaterIcon,
     SettingsRemote as SettingsRemoteIcon,
     Videocam as CameraIcon,
-    GitHub as GithubIcon,
     MenuBook as DocsIcon,
     Wysiwyg as SystemInformationIcon,
     Info as AboutIcon,
-    Help as HelpIcon,
-    SmartToy as AiIcon,
     SvgIconComponent
 } from "@mui/icons-material";
 import {Link, useLocation} from "react-router-dom";
@@ -45,8 +42,7 @@ import {useCapabilitiesSupported} from "../CapabilitiesProvider";
 import {
     RobotMonochromeIcon,
     SwaggerUIIcon,
-    ValetudoMonochromeIcon,
-    ValetudoHeartMonochromeIcon
+    ValetudoMonochromeIcon
 } from "./CustomIcons";
 
 interface MenuEntry {
@@ -304,20 +300,6 @@ const menuTree: Array<MenuEntry | MenuSubEntry | MenuSubheader> = [
     },
     {
         kind: "MenuEntry",
-        route: "/valetudo/ai",
-        title: "AI Assistant",
-        menuIcon: AiIcon,
-        menuText: "AI Assistant"
-    },
-    {
-        kind: "MenuEntry",
-        route: "/valetudo/help",
-        title: "General Help",
-        menuIcon: HelpIcon,
-        menuText: "General Help"
-    },
-    {
-        kind: "MenuEntry",
         route: "/valetudo/about",
         title: "About Valetudo",
         menuIcon: AboutIcon,
@@ -533,30 +515,6 @@ const ValetudoAppBar: React.FunctionComponent<{ paletteMode: PaletteMode, setPal
                             <DocsIcon/>
                         </ListItemIcon>
                         <ListItemText primary="Docs"/>
-                    </ListItemButton>
-                    <ListItemButton
-                        component="a"
-                        href="https://github.com/Hypfer/Valetudo"
-                        target="_blank"
-                        rel="noopener"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <ListItemIcon>
-                            <GithubIcon/>
-                        </ListItemIcon>
-                        <ListItemText primary="Hypfer/Valetudo"/>
-                    </ListItemButton>
-                    <ListItemButton
-                        component="a"
-                        href="https://github.com/sponsors/Hypfer"
-                        target="_blank"
-                        rel="noopener"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <ListItemIcon>
-                            <ValetudoHeartMonochromeIcon/>
-                        </ListItemIcon>
-                        <ListItemText primary="Donate"/>
                     </ListItemButton>
 
 
