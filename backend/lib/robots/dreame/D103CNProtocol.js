@@ -1,5 +1,6 @@
 /* D103CN-specific pure parsing/policy. No sockets, robot emulation or filesystem IO. */
 const crypto = require("crypto");
+const featurePolicy = require("./D103CNFeaturePolicy");
 const zlib = require("zlib");
 
 const READ_PROPERTIES = Object.freeze([
@@ -104,11 +105,15 @@ function commandAllowed(method, args, policy = {}) {
     if (method === "get_properties") {
         return Array.isArray(args) && args.length > 0 && args.length <= 16 &&
             args.every(p => p && (containsPair(READ_PROPERTIES, p.siid, p.piid) ||
+                containsPair(featurePolicy.READ_PROPERTIES, p.siid, p.piid) ||
                 // Large settings JSON is read on demand by the upstream
                 // capabilities, independently of the normal telemetry batches.
                 (args.length === 1 && p.siid === 4 && p.piid === 50)));
     }
     if (method === "action" && args && Array.isArray(args.in)) {
+        if (policy.allowControls === true && featurePolicy.actionAllowed(args)) {
+            return true;
+        }
         if (policy.allowControls === true && args.in.length === 0 &&
             containsPair(BASIC_ACTIONS, args.siid, args.aiid)) {
             return true;
@@ -136,18 +141,18 @@ function commandAllowed(method, args, policy = {}) {
                 const tunable = JSON.parse(args[0].value);
                 return tunable !== null && !Array.isArray(tunable) &&
                     Object.keys(tunable).sort().join(",") === "k,v" &&
-                    ((["MopExtrSwitch", "LessColl"].includes(tunable.k) && [0, 1].includes(tunable.v)) ||
+                    ((["MopExtrSwitch", "LessColl", "CarpetFineClean"].includes(tunable.k) && [0, 1].includes(tunable.v)) ||
                     (tunable.k === "ExtrFreq" && [1, 2, 7].includes(tunable.v)));
             } catch (_) {
                 return false;
             }
         }
-        return args.every(p => p && Number.isInteger(p.value) && (
+        return args.every(p => featurePolicy.writeAllowed(p) || (p && Number.isInteger(p.value) && (
             (p.siid === 2 && p.piid === 3 && p.value >= 0 && p.value <= 3) ||
             (p.siid === 4 && p.piid === 5 && p.value >= 1 && p.value <= 3) ||
             (p.siid === 4 && p.piid === 23 && args.length === 1 && validCleanSettings(p.value)) ||
             (p.siid === 7 && p.piid === 1 && p.value >= 0 && p.value <= 100)
-        ));
+        )));
     }
     return false;
 }
