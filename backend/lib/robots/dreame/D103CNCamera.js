@@ -23,6 +23,8 @@ class D103CNCamera {
         this.started = 0;
         this.lastRequest = 0;
         this.bright = false;
+        this.allowBrightManual = false;
+        this.waitingSince = 0;
         this.error = null;
         /** @type {Promise<void>|null} */
         this.stopping = null;
@@ -33,7 +35,7 @@ class D103CNCamera {
 
     state() {
         return {available: fs.existsSync(ROOT + "/camera-session.sh"), running: !!this.child,
-            width: 640, height: 480, bright: this.bright, experimental: true,
+            width: 640, height: 480, bright: this.bright, allowBrightManual: this.allowBrightManual, experimental: true,
             frameAgeMs: this.frame ? Math.round(performance.now() - this.frame.at) : null,
             sequence: this.frame?.sequence ?? 0,
             fps: this.started ? Math.round(this.received * 10000 / Math.max(1, performance.now() - this.started)) / 10 : 0,
@@ -41,7 +43,7 @@ class D103CNCamera {
             description: "SC035GS monochrome navigation camera; factory exposure while driving"};
     }
 
-    async start(bright) {
+    async start(bright, allowBrightManual = false) {
         if (this.child || this.stopping) {
             throw new Error("Camera is already open or restoring; stop it before changing mode");
         }
@@ -50,8 +52,8 @@ class D103CNCamera {
             throw new Error("Camera session changed during state refresh; retry");
         }
         const manual = this.robot.capabilities.HighResolutionManualControlCapability;
-        if (manual?.enabling || manual?.stopping || (bright && manual?.active)) {
-            throw new Error("Bright camera mode is unavailable with manual control enabled");
+        if (manual?.enabling || manual?.stopping || (bright && manual?.active && !allowBrightManual)) {
+            throw new Error("Bright camera while driving requires explicit experimental-mode approval");
         }
         const readiness = this.robot.getControlReadiness();
         if (!readiness.ready) {
@@ -63,8 +65,10 @@ class D103CNCamera {
         this.error = null;
         this.received = 0;
         this.started = performance.now();
+        this.waitingSince = this.started;
         this.lastRequest = this.started;
         this.bright = bright;
+        this.allowBrightManual = allowBrightManual;
         const child = childProcess.spawn("/bin/sh", [ROOT + "/camera-session.sh", bright ? "bright" : "factory"], {
             stdio: ["pipe", "pipe", "pipe"], env: {PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LC_ALL: "C"}
         });
@@ -105,6 +109,7 @@ class D103CNCamera {
                 this.frame = null;
                 this.buffer = Buffer.alloc(0);
                 this.bright = false;
+                this.allowBrightManual = false;
                 if (code !== 0) {
                     this.error = "Camera session ended; check sensor restoration before retrying";
                 }
@@ -120,7 +125,7 @@ class D103CNCamera {
             if ((ready && now - this.lastRequest > 5000) || readinessNow.fault !== 0 ||
                 readinessNow.ageMs === null || readinessNow.ageMs > 10000 ||
                 (!manualNow?.active && ![2, 3, 6, 13, 21, 23].includes(statusNow)) ||
-                (this.frame ? now - this.frame.at > 5000 : now - this.started > 10000)) {
+                (this.frame ? now - this.frame.at > 5000 : now - this.waitingSince > 10000)) {
                 this.stop().catch(() => Logger.warn("D103CN camera restore did not finish"));
             } else if (child.stdin.writableLength < 128) {
                 child.stdin.write("K");
@@ -138,20 +143,23 @@ class D103CNCamera {
             return;
         }
         await this.ready;
-        // Mark camera ownership transfer before enabling navigation; do not close its stream on page exit.
-        await this.exec("/usr/bin/avacmd", ["camera_laser",
-            '{"type":"camera_laser","cmd":"set_exposure_gain","expose":950,"gain":48}']);
-        let restored = false;
-        for (let n = 0; n < 10; n++) {
-            const readback = await this.exec(ROOT + "/camera-controls", []);
-            if (/name=Exposure value=950 /.test(readback) && /name=Gain value=48 /.test(readback)) {
-                restored = true;
-                break;
+        const keepBright = this.bright && this.allowBrightManual;
+        // Bright manual view is explicit and session-only; all autonomous start/home actions stop/restore it.
+        if (!keepBright) {
+            await this.exec("/usr/bin/avacmd", ["camera_laser",
+                '{"type":"camera_laser","cmd":"set_exposure_gain","expose":950,"gain":48}']);
+            let restored = false;
+            for (let n = 0; n < 10; n++) {
+                const readback = await this.exec(ROOT + "/camera-controls", []);
+                if (/name=Exposure value=950 /.test(readback) && /name=Gain value=48 /.test(readback)) {
+                    restored = true;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
-            await new Promise(resolve => setTimeout(resolve, 200));
-        }
-        if (!restored) {
-            throw new Error("Factory camera exposure was not restored; manual enable refused");
+            if (!restored) {
+                throw new Error("Factory camera exposure was not restored; manual enable refused");
+            }
         }
         if (!this.child || this.stopping) {
             throw new Error("Camera session changed during manual enable; retry");
@@ -172,11 +180,14 @@ class D103CNCamera {
                 reject(new Error("Camera ownership transfer timed out; manual enable refused"));
             }, 2500);
             child.stderr.on("data", onData);
-            child.stdin.write("MR");
+            child.stdin.write(keepBright ? "M" : "MR");
         });
-        this.epoch++;
-        this.bright = false;
-        this.frame = null;
+        if (!keepBright) {
+            this.epoch++;
+            this.bright = false;
+            this.frame = null;
+            this.waitingSince = performance.now();
+        }
     }
 
     /**

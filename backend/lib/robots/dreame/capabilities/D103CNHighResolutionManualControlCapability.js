@@ -22,6 +22,8 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
         this.stopping = null;
         this.timer = undefined;
         this.watchdogBusy = false;
+        this.lastError = null;
+        this.lastAckAt = 0;
     }
 
     assertReady() {
@@ -41,9 +43,11 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
                 did: this.robot.deviceId, siid: 4, piid: 15, value: payload
             }], {timeout: 350, noRetry: true});
             if (!Array.isArray(result) || result.length !== 1 || result[0].code !== 0) {
-                throw new Error("D103CN manual command was not acknowledged");
+                const code = Number.isInteger(result?.[0]?.code) ? result[0].code : "invalid reply";
+                throw new Error(`D103CN manual command rejected: ${code}`);
             }
             this.lastSent = performance.now();
+            this.lastAckAt = this.lastSent;
         })();
         try {
             await this.pending;
@@ -60,6 +64,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             throw new Error("D103CN manual mode is changing");
         }
         this.enabling = true;
+        this.lastError = null;
         const session = ++this.session;
         try {
             await this.robot.refreshControlState();
@@ -75,7 +80,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             this.moving = false;
             this.lastInput = performance.now();
             this.timer = setInterval(() => {
-                this.watchdog().catch(() => Logger.warn("D103CN manual watchdog stop was not acknowledged"));
+                this.watchdog().catch(e => Logger.warn("D103CN manual watchdog failure", {reason: e.message}));
             }, 100);
             this.timer.unref();
         } finally {
@@ -100,6 +105,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             await this.write(payload);
             this.moving = vector.velocity !== 0 || vector.angle !== 0;
         } catch (e) {
+            this.lastError = e.message;
             await this.disableManualControl().catch(() => Logger.warn("D103CN manual error stop was not acknowledged"));
             throw e;
         }
@@ -118,6 +124,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
                 await this.write(D103.manualPayload({velocity: 0, angle: 0}));
             }
         } catch (e) {
+            this.lastError = e.message;
             await this.disableManualControl();
             throw e;
         } finally {
@@ -166,6 +173,11 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
             maxLinearCommand: D103.MANUAL_LIMITS.velocity,
             maxAngularCommand: D103.MANUAL_LIMITS.rotation, deadmanTimeoutMs: D103.MANUAL_LIMITS.deadmanMs,
             motionTested: false};
+    }
+
+    getDiagnostics() {
+        return {error: this.lastError, pending: !!this.pending, moving: this.moving,
+            lastAckAgeMs: this.lastAckAt ? Math.round(performance.now() - this.lastAckAt) : null};
     }
 }
 

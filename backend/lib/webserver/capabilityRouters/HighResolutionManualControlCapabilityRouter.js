@@ -17,15 +17,23 @@ class HighResolutionManualControlCapabilityRouter extends CapabilityRouter {
                     this.sendErrorResponse(req, res, e);
                 }
             });
+            this.router.get("/transport/readiness", async (req, res) => {
+                try {
+                    res.set("Cache-Control", "no-store").json(await this.capability.robot.probeManualTransport());
+                } catch (e) {
+                    this.sendErrorResponse(req, res, e);
+                }
+            });
             this.router.put("/camera", async (req, res) => {
                 if (typeof req.body?.enabled !== "boolean" ||
                     (req.body.bright !== undefined && typeof req.body.bright !== "boolean") ||
-                    Object.keys(req.body).some(key => !["enabled", "bright"].includes(key))) {
+                    (req.body.allowBrightManual !== undefined && typeof req.body.allowBrightManual !== "boolean") ||
+                    Object.keys(req.body).some(key => !["enabled", "bright", "allowBrightManual"].includes(key))) {
                     return res.sendStatus(400);
                 }
                 try {
                     if (req.body.enabled) {
-                        await camera.start(req.body.bright === true);
+                        await camera.start(req.body.bright === true, req.body.allowBrightManual === true);
                     } else {
                         await camera.stop();
                     }
@@ -49,7 +57,8 @@ class HighResolutionManualControlCapabilityRouter extends CapabilityRouter {
         this.router.get("/", async (req, res) => {
             try {
                 res.json({
-                    enabled: await this.capability.manualControlActive()
+                    enabled: await this.capability.manualControlActive(),
+                    ...(typeof this.capability.getDiagnostics === "function" ? this.capability.getDiagnostics() : {})
                 });
             } catch (e) {
                 this.sendErrorResponse(req, res, e);
