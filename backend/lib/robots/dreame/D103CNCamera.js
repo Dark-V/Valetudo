@@ -26,6 +26,7 @@ class D103CNCamera {
         this.allowBrightManual = false;
         this.waitingSince = 0;
         this.error = null;
+        this.stopReason = null;
         /** @type {Promise<void>|null} */
         this.stopping = null;
         this.timer = null;
@@ -39,15 +40,18 @@ class D103CNCamera {
             frameAgeMs: this.frame ? Math.round(performance.now() - this.frame.at) : null,
             sequence: this.frame?.sequence ?? 0,
             fps: this.started ? Math.round(this.received * 10000 / Math.max(1, performance.now() - this.started)) / 10 : 0,
-            error: this.error, maxFps: 10, leaseSeconds: 5, readiness: this.robot.getControlReadiness(),
-            description: "SC035GS monochrome navigation camera; factory exposure while driving"};
+            error: this.error, stopReason: this.stopReason, restoring: !!this.stopping,
+            maxFps: 10, leaseSeconds: 5, readiness: this.robot.getControlReadiness(),
+            description: "SC035GS monochrome navigation camera; bright driving requires explicit approval"};
     }
 
     async start(bright, allowBrightManual = false) {
         if (this.child || this.stopping) {
             throw new Error("Camera is already open or restoring; stop it before changing mode");
         }
-        await this.robot.refreshControlState();
+        // Only this read-only startup may handshake/queue after idle. Manual
+        // control retains its no-retry, no-queue readiness and movement policy.
+        await this.robot.refreshControlState({noRetry: false});
         if (this.child || this.stopping) {
             throw new Error("Camera session changed during state refresh; retry");
         }
@@ -63,6 +67,7 @@ class D103CNCamera {
         this.epoch++;
         this.buffer = Buffer.alloc(0);
         this.error = null;
+        this.stopReason = null;
         this.received = 0;
         this.started = performance.now();
         this.waitingSince = this.started;
@@ -91,6 +96,7 @@ class D103CNCamera {
             if (!ready && diagnostics.includes("CAMERA_READY")) {
                 ready = true;
                 this.lastRequest = performance.now();
+                this.waitingSince = this.lastRequest;
                 markReady();
             }
         });
@@ -101,7 +107,11 @@ class D103CNCamera {
         });
         this.closed = new Promise(resolve => {
             child.once("close", code => {
-                rejectReady(new Error("Camera session closed before readiness"));
+                const failure = diagnostics.includes("CAMERA_RESTORE_FAILED") ? "Camera sensor restoration failed" :
+                    diagnostics.includes("UNKNOWN_SENSOR_PROFILE") ? "Sensor is not at its factory exposure; camera was not started" :
+                        diagnostics.includes("THERMAL_STOP") ? "Camera stopped at its temperature limit" :
+                            "Camera session closed before readiness";
+                rejectReady(new Error(failure));
                 clearInterval(this.timer);
                 this.timer = null;
                 this.child = null;
@@ -111,22 +121,28 @@ class D103CNCamera {
                 this.bright = false;
                 this.allowBrightManual = false;
                 if (code !== 0) {
-                    this.error = "Camera session ended; check sensor restoration before retrying";
+                    this.error = failure;
                 }
-                Logger.info("D103CN camera session closed", {code: code, diagnostics: diagnostics});
+                Logger.info("D103CN camera session closed", {code: code, reason: this.stopReason, diagnostics: diagnostics});
                 resolve();
             });
         });
         this.timer = setInterval(() => {
+            if (this.stopping) {
+                return;
+            }
             const now = performance.now();
             const statusNow = this.robot.d103State.find(p => p.siid === 2 && p.piid === 1)?.value;
             const manualNow = this.robot.capabilities.HighResolutionManualControlCapability;
             const readinessNow = this.robot.getControlReadiness();
-            if ((ready && now - this.lastRequest > 5000) || readinessNow.fault !== 0 ||
-                readinessNow.ageMs === null || readinessNow.ageMs > 10000 ||
-                (!manualNow?.active && ![2, 3, 6, 13, 21, 23].includes(statusNow)) ||
-                (this.frame ? now - this.frame.at > 5000 : now - this.waitingSince > 10000)) {
-                this.stop().catch(() => Logger.warn("D103CN camera restore did not finish"));
+            const reason = (ready && now - this.lastRequest > 5000) ? "Viewer lease expired" :
+                readinessNow.fault !== 0 ? `Robot fault ${readinessNow.fault}` :
+                    (readinessNow.ageMs === null || readinessNow.ageMs > 10000) ? "Robot telemetry expired" :
+                        (!manualNow?.active && ![2, 3, 6, 13, 21, 23].includes(statusNow)) ? `Robot status changed to ${statusNow}` :
+                            (this.frame ? now - this.frame.at > 5000 : now - this.waitingSince > 10000) ? "Fresh camera frames timed out" : null;
+            if (reason) {
+                this.error = reason;
+                this.stop(reason).catch(() => Logger.warn("D103CN camera restore did not finish"));
             } else if (child.stdin.writableLength < 128) {
                 child.stdin.write("K");
             }
@@ -207,7 +223,7 @@ class D103CNCamera {
         });
     }
 
-    async stop() {
+    async stop(reason = "Stop requested") {
         if (this.stopping) {
             return this.stopping;
         }
@@ -215,6 +231,9 @@ class D103CNCamera {
             return;
         }
         const child = this.child;
+        this.stopReason = reason;
+        clearInterval(this.timer);
+        this.timer = null;
         this.frame = null;
         this.stopping = (async () => {
             child.stdin.end("Q");
@@ -222,7 +241,7 @@ class D103CNCamera {
             let timeout;
             try {
                 await Promise.race([this.closed, new Promise((_, reject) => {
-                    timeout = setTimeout(() => reject(new Error("Camera restore timeout")), 16000);
+                    timeout = setTimeout(() => reject(new Error("Camera restore timeout")), 25000);
                 })]);
             } finally {
                 clearTimeout(timeout);
