@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require("path");
+const {execFileSync} = require("child_process");
 
 
 function GET_VALETUDO_VERSION() {
@@ -24,11 +25,10 @@ function GET_COMMIT_ID() {
 
     try {
         const rootDirectory = path.resolve(__dirname, "..");
-        commitId = fs.readFileSync(rootDirectory + "/.git/HEAD", {"encoding": "utf-8"}).trim();
-
-        if (commitId.match(/^ref: refs\/heads\/master$/) !== null) {
-            commitId = fs.readFileSync(rootDirectory + "/.git/refs/heads/master", {"encoding": "utf-8"}).trim();
-        }
+        // Resolve all branches, detached HEADs, packed refs and Git worktrees.
+        commitId = execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: rootDirectory, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"]
+        }).trim();
     } catch (e) {
         //intentional
     }

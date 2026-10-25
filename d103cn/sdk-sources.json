@@ -1,0 +1,36 @@
+{
+  "upstreamFeaturesCommit": "8f42a2e3c4e580691165cb26fa7ec64c3700cfb8",
+  "upstreamBuilderCommit": "7afed16999711833a8ac0b3b482e935c3ef77219",
+  "recipe": "modify1cimage.sh patch_dns ARM32 branch",
+  "files": {
+    "miio_client": {
+      "source": "miio_clients/dreame_3.5.8/miio_client.patchedlimit.nomdns",
+      "sourceSha256": "67991f0299c8ba54cf258ef8bf9b032f2f867233fd65d93dc172d5f17ea0b99b",
+      "candidateSha256": "130c8733b1c90be23894454b2a149921170d9f553228029660d6635a6cb6dc36",
+      "changes": [
+        {
+          "from": "110.43.0.83",
+          "to": "127.000.0.1",
+          "occurrences": 1
+        },
+        {
+          "from": "110.43.0.85",
+          "to": "127.000.0.1",
+          "occurrences": 1
+        }
+      ]
+    },
+    "libjson-c.so.2": {
+      "source": "miio_clients/3.5.8.lib/libjson-c.so.2",
+      "sourceSha256": "70be1e5e556193badc6e49ce10d33609503beddaddf8f12e307f8b7b6d287175",
+      "candidateSha256": "70be1e5e556193badc6e49ce10d33609503beddaddf8f12e307f8b7b6d287175",
+      "changes": []
+    },
+    "miio_client_helper_nomqtt.sh": {
+      "source": "miio_clients/dreame_4.1.8/miio_client_helper_nomqtt.sh",
+      "sourceSha256": "71e06c568f9012d0ca8cae0620b78b9b7962cde5e89487af5ef626e7e274037a",
+      "candidateSha256": "71e06c568f9012d0ca8cae0620b78b9b7962cde5e89487af5ef626e7e274037a",
+      "changes": []
+    }
+  }
+}
