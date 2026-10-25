@@ -5,6 +5,7 @@ const D103 = require("./D103CNProtocol");
 const D103CNCamera = require("./D103CNCamera");
 const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentStatisticsCapability");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
+const D103CNSavedMap = require("./D103CNSavedMap");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
 const dgram = require("dgram");
 const DreameMapParser = require("./DreameMapParser");
@@ -38,6 +39,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.mapLastPollAt = null;
         this.mapLastError = null;
         this.mapBootstrapTimer = null;
+        this.savedMapFingerprint = null;
+        this.savedMapSnapshots = 0;
+        this.savedMapError = null;
+        this.lastLiveMapAt = 0;
         this.pollInFlight = null;
         this.camera = new D103CNCamera(this);
         const manualUdp = dgram.createSocket("udp4");
@@ -298,12 +303,15 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         // Intentionally do not call MiioValetudoRobot.startup(): it prints DID and both secrets.
         Logger.info("Experimental Xiaomi Mijia M30S / D103CN profile; secrets redacted");
         Logger.info(`D103CN controls=${this.implConfig.allowControls === true}, mapPolling=${this.implConfig.enableMapPolling === true}`);
+        if (this.implConfig.enableMapPolling === true) {
+            this.pollMap();
+        }
     }
 
     onCloudConnected() {
         // Upstream fires this even on an empty/unauthenticated datagram. Do not call that auth success.
         Logger.info("D103CN cloud UDP transport seen; authenticated messages still required");
-        if (this.implConfig.enableMapPolling === true) {
+        if (this.implConfig.enableMapPolling === true && this.implConfig.enableLegacyCloudMapPolling === true) {
             clearTimeout(this.mapBootstrapTimer);
             this.mapBootstrapTimer = setTimeout(() => this.pollMap(), 5000);
             this.mapBootstrapTimer.unref();
@@ -333,7 +341,24 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     }
 
     async executeMapPoll() {
-        if (this.implConfig.enableMapPolling !== true || !this.dummyCloud.miioSocket.connected) {
+        if (this.implConfig.enableMapPolling !== true) {
+            return;
+        }
+        if (Date.now() - this.lastLiveMapAt > 60000) {
+            try {
+                const saved = D103CNSavedMap.READ_NEW(this.savedMapFingerprint);
+                if (saved) {
+                    this.savedMapFingerprint = saved.fingerprint;
+                    this.state.map = saved.map;
+                    this.savedMapSnapshots++;
+                    this.savedMapError = null;
+                    this.emitMapUpdated();
+                }
+            } catch (e) {
+                this.savedMapError = "Local saved-map read/format validation failed";
+            }
+        }
+        if (this.implConfig.enableLegacyCloudMapPolling !== true || !this.dummyCloud.miioSocket.connected) {
             return;
         }
         // Bootstrap with a read-only encrypted map request. Waiting for a map
@@ -367,8 +392,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         const raw = D103.decodeMapEnvelope(data, {iv: this.implConfig.mapIv ?? D103PublicProfile.publicMapIv});
         const parsed = await DreameMapParser.PARSE(raw);
         if (parsed) {
+            parsed.metaData.source = "D103CN live SDK map";
             this.state.map = parsed;
             this.mapFramesParsed++;
+            this.lastLiveMapAt = Date.now();
             this.mapLastError = null;
             this.emitMapUpdated();
         }
@@ -386,6 +413,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     async shutdown() {
         clearTimeout(this.mapBootstrapTimer);
+        clearTimeout(this.mapPollTimeout);
         clearInterval(this.controlStateTimer);
         this.controlStateTimer = null;
         const manual = this.capabilities.HighResolutionManualControlCapability;
@@ -404,6 +432,8 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             cloudAuthenticatedMessages: this.authenticatedCloudMessages, mapFramesParsed: this.mapFramesParsed,
             mapBridge: {connected: this.dummyCloud.miioSocket.connected,
                 lastPollAt: this.mapLastPollAt, lastError: this.mapLastError},
+            savedMap: {snapshotsLoaded: this.savedMapSnapshots, lastError: this.savedMapError,
+                displayed: this.state.map.metaData.savedMapSnapshot === true},
             diagnostics: this.lastDiagnostics, controlReadiness: this.getControlReadiness()};
     }
 
