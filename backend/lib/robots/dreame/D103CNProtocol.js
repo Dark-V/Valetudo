@@ -103,7 +103,10 @@ function validManualPayload(value) {
 function commandAllowed(method, args, policy = {}) {
     if (method === "get_properties") {
         return Array.isArray(args) && args.length > 0 && args.length <= 16 &&
-            args.every(p => p && containsPair(READ_PROPERTIES, p.siid, p.piid));
+            args.every(p => p && (containsPair(READ_PROPERTIES, p.siid, p.piid) ||
+                // Large settings JSON is read on demand by the upstream
+                // capabilities, independently of the normal telemetry batches.
+                (args.length === 1 && p.siid === 4 && p.piid === 50)));
     }
     if (method === "action" && args && Array.isArray(args.in)) {
         if (policy.allowControls === true && args.in.length === 0 &&
@@ -119,6 +122,22 @@ function commandAllowed(method, args, policy = {}) {
         args.length > 0 && args.length <= 3) {
         if (policy.allowManualControl === true && args.length === 1 && args[0]?.siid === 4 && args[0]?.piid === 15) {
             return validManualPayload(args[0].value);
+        }
+        if (args.length === 1 && args[0]?.siid === 4 && args[0]?.piid === 50) {
+            // Same single-tunable serialization as upstream DreameUtils.
+            // Do not rewrite the entire stock settings list or unrelated fields.
+            try {
+                if (typeof args[0].value !== "string" || args[0].value.length > 80) {
+                    return false;
+                }
+                const tunable = JSON.parse(args[0].value);
+                return tunable !== null && !Array.isArray(tunable) &&
+                    Object.keys(tunable).sort().join(",") === "k,v" &&
+                    ((["MopExtrSwitch", "LessColl"].includes(tunable.k) && [0, 1].includes(tunable.v)) ||
+                    (tunable.k === "ExtrFreq" && [1, 2, 7].includes(tunable.v)));
+            } catch (_) {
+                return false;
+            }
         }
         return args.every(p => p && Number.isInteger(p.value) && (
             (p.siid === 2 && p.piid === 3 && p.value >= 0 && p.value <= 3) ||

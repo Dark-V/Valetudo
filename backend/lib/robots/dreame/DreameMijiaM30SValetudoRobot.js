@@ -11,10 +11,12 @@ const D103PublicProfile = require("./D103CNPublicProfile.json");
 const dgram = require("dgram");
 const DreameMapParser = require("./DreameMapParser");
 const DreameMiotHelper = require("./DreameMiotHelper");
+const DreameQuirkFactory = require("./DreameQuirkFactory");
 const fs = require("fs");
 const Logger = require("../../Logger");
 const MiioSocket = require("../../miio/MiioSocket");
 const MiioValetudoRobot = require("../MiioValetudoRobot");
+const QuirksCapability = require("../../core/capabilities/QuirksCapability");
 const ValetudoRobotError = require("../../entities/core/ValetudoRobotError");
 const ValetudoSelectionPreset = require("../../entities/core/ValetudoSelectionPreset");
 
@@ -58,6 +60,15 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.registerCapability(new D103CNCurrentStatisticsCapability({robot: this}));
 
         if (this.implConfig.allowControls === true) {
+            // These stock MIOT 4/50 tunables match the existing Dreame Gen2
+            // contract. Reuse its implementations, rather than another controller.
+            const dreame = /** @type {import("./DreameValetudoRobot")} */ (/** @type {unknown} */ (this));
+            this.registerCapability(new capabilities.DreameMopExtensionControlCapabilityV2({robot: dreame}));
+            this.registerCapability(new capabilities.DreameCollisionAvoidantNavigationControlCapability({robot: dreame}));
+            const quirkFactory = new DreameQuirkFactory({robot: dreame});
+            this.registerCapability(new QuirksCapability({robot: this, quirks: [
+                quirkFactory.getQuirk(DreameQuirkFactory.KNOWN_QUIRKS.EDGE_EXTENSION_FREQUENCY)
+            ]}));
             this.registerCapability(new D103CNOperationModeControlCapability({
                 robot: this, presets: Object.entries(D103.OPERATION_MODES).map(([name, value]) =>
                     new ValetudoSelectionPreset({name: name, value: value}))
