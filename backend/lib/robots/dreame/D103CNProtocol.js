@@ -4,8 +4,8 @@ const featurePolicy = require("./D103CNFeaturePolicy");
 const zlib = require("zlib");
 
 const READ_PROPERTIES = Object.freeze([
-    [2, 1], [2, 2], [2, 3], [3, 1], [3, 2],
-    [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 25], [7, 1]
+    [2, 1], [2, 2], [2, 3], [2, 5], [3, 1], [3, 2], [4, 25], [15, 5],
+    [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 64], [7, 1]
 ]);
 // Stock packed clean-setting 4/23: low byte selects operation mode;
 // upper bytes contain mop washing/wetness settings and must be preserved.
@@ -192,6 +192,8 @@ function summarizeState(properties) {
         fan: values.get("2/3"), water: values.get("4/5"), operationMode: operationMode(values.get("4/23")),
         dock: status === undefined || stateMap[status] === undefined ? undefined :
             ({8: "drying", 9: "cleaning", 20: "cleaning", 21: "pause", 22: "emptying", 30: "cleaning"})[status] ?? "idle",
+        station: {mopDockStatus: values.get("4/25"), autoEmptyState: values.get("15/5"),
+            dryingRemainingMinutes: values.get("2/5"), dryingProgressPercent: values.get("4/64")},
         // No speculative conversion of clean_area to cm²: retain its raw value for diagnostics.
         diagnostics: {cleanTimeMinutes: values.get("4/2"), cleanAreaRaw: values.get("4/3"),
             washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23"),

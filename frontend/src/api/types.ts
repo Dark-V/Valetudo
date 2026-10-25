@@ -435,6 +435,7 @@ export interface LogLine {
 export interface SimpleToggleState {
     enabled: boolean;
     error?: string | null;
+    readiness?: {ready: boolean; reason: string | null};
 }
 
 export interface SpeakerVolumeState {

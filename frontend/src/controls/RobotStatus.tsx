@@ -14,6 +14,7 @@ import {
 import {RobotMonochromeIcon} from "../components/CustomIcons";
 import ControlsCard from "./ControlsCard";
 import {useValetudoColorsInverse} from "../hooks/useValetudoColors";
+import {describeDockState} from "./DockStateDescription";
 
 const BatteryProgress = styled(LinearProgress)(({ theme }) => {
     return {
@@ -39,6 +40,8 @@ const RobotStatus = (): React.ReactElement => {
         isError: isBatteryError,
     } = useRobotAttributeQuery(RobotAttributeClass.BatteryState);
     const isPending = isStatusPending || isBatteryPending;
+    const {data: dockStatus} = useRobotAttributeQuery(RobotAttributeClass.DockStatusState);
+    const dock = dockStatus?.[0];
 
     const stateDetails = React.useMemo(() => {
         if (isStatusError) {
@@ -124,6 +127,11 @@ const RobotStatus = (): React.ReactElement => {
                         {stateDetails}
                     </Grid2>
                 </Grid2>
+                {dock && !["idle", "error"].includes(dock.value) && (
+                    <Typography variant="body2" color="textSecondary" sx={{mb: 1}}>
+                        {describeDockState(dock)}
+                    </Typography>
+                )}
                 {batteries !== undefined && batteries.length > 0 && (
                     <Grid2 size="grow" container direction="row" width="100%">
                         {batteriesDetails}

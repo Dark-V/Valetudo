@@ -58,6 +58,9 @@ const HighResolutionControlToggle = () => {
     return (
         <Box>
             {manualControlState?.error && <Alert severity="error">{manualControlState.error}</Alert>}
+            {manualControlState?.readiness?.ready === false && manualControlState.readiness.reason && (
+                <Alert severity="info">{manualControlState.readiness.reason}</Alert>
+            )}
             <FormControlLabel
                 control={
                     <Switch

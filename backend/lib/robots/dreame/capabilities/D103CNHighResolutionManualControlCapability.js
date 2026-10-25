@@ -30,7 +30,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
     assertReady() {
         const readiness = this.robot.getControlReadiness();
         if (!readiness.ready) {
-            throw new Error(`D103CN manual control not ready: status=${readiness.status}, fault=${readiness.fault}, ageMs=${readiness.ageMs}`);
+            throw new Error(readiness.reason ?? "Manual control is not ready; refresh robot state");
         }
     }
 
@@ -185,6 +185,7 @@ class D103CNHighResolutionManualControlCapability extends HighResolutionManualCo
 
     getDiagnostics() {
         return {error: this.lastError, pending: !!this.pending, moving: this.moving,
+            readiness: this.robot.getControlReadiness(),
             lastAckLatencyMs: this.lastAckLatencyMs,
             lastAckAgeMs: this.lastAckAt ? Math.round(performance.now() - this.lastAckAt) : null};
     }

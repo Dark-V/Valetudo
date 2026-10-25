@@ -2,7 +2,7 @@ import {Grid2} from "@mui/material";
 import {
     AppRegistration as OperationModeIcon,
 } from "@mui/icons-material";
-import {Capability, useRobotInformationQuery} from "../api";
+import {Capability, RobotAttributeClass, useRobotAttributeQuery, useRobotInformationQuery} from "../api";
 import {useCapabilitiesSupported} from "../CapabilitiesProvider";
 import BasicControls from "./BasicControls";
 import PresetSelectionControl from "./PresetSelection";
@@ -38,6 +38,7 @@ const ControlsBody = (): React.ReactElement => {
     const {
         data: robotInformation,
     } = useRobotInformationQuery();
+    const {data: dockStatus} = useRobotAttributeQuery(RobotAttributeClass.DockStatusState);
 
 
     return (
@@ -78,7 +79,7 @@ const ControlsBody = (): React.ReactElement => {
             )}
 
             {
-                (triggerEmptySupported || mopDockCleanTriggerSupported || mopDockDryTriggerSupported) &&
+                (triggerEmptySupported || mopDockCleanTriggerSupported || mopDockDryTriggerSupported || dockStatus?.length === 1) &&
 
                 <Dock/>
             }
