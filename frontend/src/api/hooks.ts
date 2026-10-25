@@ -40,6 +40,7 @@ import {
     fetchSystemRuntimeInfo,
     fetchTimerInformation,
     fetchTimerProperties,
+    fetchCleaningHistory,
     fetchTotalStatistics,
     fetchTotalStatisticsProperties,
     fetchUpdaterState,
@@ -249,6 +250,7 @@ enum QueryKey {
     UpdaterState = "updater_state",
     CurrentStatistics = "current_statistics",
     CurrentStatisticsProperties = "current_statistics_properties",
+    CleaningHistory = "cleaning_history",
     TotalStatistics = "total_statistics",
     TotalStatisticsProperties = "total_statistics_properties",
     Quirks = "quirks",
@@ -1915,5 +1917,15 @@ export const useMapAnnotationsMutation = (
             await queryClient.invalidateQueries({ queryKey: [QueryKey.Map] });
             await options?.onSuccess?.(data, ...args);
         },
+    });
+};
+
+export const useCleaningHistoryQuery = (limit: number, offset: number) => {
+    return useQuery({
+        queryKey: [QueryKey.CleaningHistory, limit, offset],
+        queryFn: () => fetchCleaningHistory(limit, offset),
+        staleTime: 15000,
+        refetchInterval: 60000,
+        retry: 1
     });
 };

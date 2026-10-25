@@ -18,6 +18,7 @@ import PaperContainer from "../components/PaperContainer";
 import {adjustHexColorBrightness, getFriendlyStatName, getHumanReadableStatValue} from "../utils";
 import {History as HistoryIcon} from "@mui/icons-material";
 import {StatisticsAchievement, statisticsAchievements} from "./res/StatisticsAchievements";
+import CleaningHistory from "./CleaningHistory";
 import {useIsMobileView} from "../hooks";
 
 const achievementColors = {
@@ -320,6 +321,7 @@ const TotalStatistics = (): React.ReactElement => {
             {supported ? <TotalStatisticsInternal/> : (
                 <Typography color="error">This robot does not support total statistics.</Typography>
             )}
+            <CleaningHistory/>
         </PaperContainer>
     );
 };

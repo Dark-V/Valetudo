@@ -1,0 +1,110 @@
+{
+  "/api/v2/robot/capabilities/CleaningHistoryCapability": {
+    "get": {
+      "tags": [
+        "CleaningHistoryCapability"
+      ],
+      "summary": "Read stored cleaning records without modifying the factory database",
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "default": 0
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "A page of records; duration in seconds, area in square centimetres, dates in Unix milliseconds",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "records",
+                  "total",
+                  "offset",
+                  "limit",
+                  "skippedRecords",
+                  "hasMore"
+                ],
+                "properties": {
+                  "records": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "startedAt",
+                        "duration",
+                        "area",
+                        "completed",
+                        "nativeMode"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "startedAt": {
+                          "type": "number"
+                        },
+                        "duration": {
+                          "type": "number"
+                        },
+                        "area": {
+                          "type": "number"
+                        },
+                        "completed": {
+                          "type": "boolean",
+                          "nullable": true
+                        },
+                        "nativeMode": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "total": {
+                    "type": "integer"
+                  },
+                  "offset": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "skippedRecords": {
+                    "type": "integer"
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Invalid pagination"
+        },
+        "500": {
+          "description": "History unavailable"
+        }
+      }
+    }
+  }
+}

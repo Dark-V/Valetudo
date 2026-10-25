@@ -9,6 +9,7 @@ import {
     AutoEmptyDockAutoEmptyIntervalPayload,
     AutoEmptyDockAutoEmptyIntervalProperties,
     Capability,
+    CleaningHistoryPage,
     CarpetSensorMode,
     CarpetSensorModeControlProperties,
     CarpetSensorModePayload,
@@ -1429,4 +1430,10 @@ export const fetchAutoEmptyDockAutoEmptyDurationControlProperties = async (): Pr
         .then(({data}) => {
             return data;
         });
+};
+
+export const fetchCleaningHistory = async (limit: number, offset: number): Promise<CleaningHistoryPage> => {
+    return (await valetudoAPI.get<CleaningHistoryPage>(`/robot/capabilities/${Capability.CleaningHistory}`, {
+        params: {limit: limit, offset: offset}, timeout: 6000
+    })).data;
 };

@@ -81,6 +81,7 @@ const CAPABILITY_TYPE_TO_ROUTER_MAPPING = {
     [capabilities.ObstacleAvoidanceControlCapability.TYPE]: capabilityRouters.SimpleToggleCapabilityRouter,
     [capabilities.PetObstacleAvoidanceControlCapability.TYPE]: capabilityRouters.SimpleToggleCapabilityRouter,
     [capabilities.AutoEmptyDockManualTriggerCapability.TYPE]: capabilityRouters.AutoEmptyDockManualTriggerCapabilityRouter,
+    [capabilities.CleaningHistoryCapability.TYPE]: capabilityRouters.CleaningHistoryCapabilityRouter,
     [capabilities.TotalStatisticsCapability.TYPE]: capabilityRouters.StatisticsCapabilityRouter,
     [capabilities.CurrentStatisticsCapability.TYPE]: capabilityRouters.StatisticsCapabilityRouter,
     [capabilities.QuirksCapability.TYPE]: capabilityRouters.QuirksCapabilityRouter,
