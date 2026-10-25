@@ -46,6 +46,7 @@ module.exports = {
     QuirksCapability: require("./QuirksCapability"),
     SpeakerTestCapability: require("./SpeakerTestCapability"),
     SpeakerVolumeControlCapability: require("./SpeakerVolumeControlCapability"),
+    SpotCleaningCapability: require("./SpotCleaningCapability"),
     TotalStatisticsCapability: require("./TotalStatisticsCapability"),
     ValetudoBasedCapability: require("./ValetudoBasedCapability"),
     VoicePackManagementCapability: require("./VoicePackManagementCapability"),

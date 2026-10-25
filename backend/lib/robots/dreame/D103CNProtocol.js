@@ -141,7 +141,7 @@ function commandAllowed(method, args, policy = {}) {
                 const tunable = JSON.parse(args[0].value);
                 return tunable !== null && !Array.isArray(tunable) &&
                     Object.keys(tunable).sort().join(",") === "k,v" &&
-                    ((["MopExtrSwitch", "LessColl", "CarpetFineClean"].includes(tunable.k) && [0, 1].includes(tunable.v)) ||
+                    ((["MopExtrSwitch", "LessColl", "CarpetFineClean", "AutoDry"].includes(tunable.k) && [0, 1].includes(tunable.v)) ||
                     (tunable.k === "ExtrFreq" && [1, 2, 7].includes(tunable.v)));
             } catch (_) {
                 return false;

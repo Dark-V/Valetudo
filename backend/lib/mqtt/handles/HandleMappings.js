@@ -49,6 +49,7 @@ const STATUS_ATTR_TO_HANDLE_MAPPING = [
 ];
 
 module.exports = {
+    [capabilities.SpotCleaningCapability.TYPE]: capabilityHandles.SpotCleaningCapabilityMqttHandle,
     CAPABILITY_TYPE_TO_HANDLE_MAPPING: CAPABILITY_TYPE_TO_HANDLE_MAPPING,
     STATUS_ATTR_TO_HANDLE_MAPPING: STATUS_ATTR_TO_HANDLE_MAPPING,
 };

@@ -51,6 +51,7 @@ class CapabilitiesRouter {
 }
 
 const CAPABILITY_TYPE_TO_ROUTER_MAPPING = {
+    [capabilities.SpotCleaningCapability.TYPE]: capabilityRouters.SpotCleaningCapabilityRouter,
     [capabilities.BasicControlCapability.TYPE]: capabilityRouters.BasicControlCapabilityRouter,
     [capabilities.DuststreamingCapability.TYPE]: capabilityRouters.DuststreamingCapabilityRouter,
     [capabilities.FanSpeedControlCapability.TYPE]: capabilityRouters.PresetSelectionCapabilityRouter,

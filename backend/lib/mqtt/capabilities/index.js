@@ -14,6 +14,7 @@ module.exports = {
     PetObstacleAvoidanceControlCapabilityMqttHandle: require("./PetObstacleAvoidanceControlCapabilityMqttHandle"),
     PresetSelectionCapabilityMqttHandle: require("./PresetSelectionCapabilityMqttHandle"),
     SpeakerVolumeControlCapabilityMqttHandle: require("./SpeakerVolumeControlCapabilityMqttHandle"),
+    SpotCleaningCapabilityMqttHandle: require("./SpotCleaningCapabilityMqttHandle"),
     TotalStatisticsCapabilityMqttHandle: require("./TotalStatisticsCapabilityMqttHandle"),
     WifiConfigurationCapabilityMqttHandle: require("./WifiConfigurationCapabilityMqttHandle"),
     ZoneCleaningCapabilityMqttHandle: require("./ZoneCleaningCapabilityMqttHandle")
