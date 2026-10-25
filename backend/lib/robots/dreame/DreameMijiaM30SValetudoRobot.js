@@ -3,6 +3,7 @@ const capabilities = require("./capabilities");
 const crypto = require("crypto");
 const D103 = require("./D103CNProtocol");
 const D103CNCamera = require("./D103CNCamera");
+const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentStatisticsCapability");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
 const dgram = require("dgram");
@@ -34,6 +35,9 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.lastControlPollError = null;
         this.authenticatedCloudMessages = 0;
         this.mapFramesParsed = 0;
+        this.mapLastPollAt = null;
+        this.mapLastError = null;
+        this.mapBootstrapTimer = null;
         this.pollInFlight = null;
         this.camera = new D103CNCamera(this);
         const manualUdp = dgram.createSocket("udp4");
@@ -45,6 +49,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.manualSocket = new MiioSocket({socket: manualUdp, token: this.localSecret,
             deviceId: this.deviceId, rinfo: {address: this.ip, port: MiioSocket.PORT},
             timeout: 350, name: "d103-manual", isCloudSocket: false});
+        this.registerCapability(new D103CNCurrentStatisticsCapability({robot: this}));
 
         if (this.implConfig.allowControls === true) {
             this.registerCapability(new capabilities.DreameBasicControlCapability({
@@ -298,6 +303,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     onCloudConnected() {
         // Upstream fires this even on an empty/unauthenticated datagram. Do not call that auth success.
         Logger.info("D103CN cloud UDP transport seen; authenticated messages still required");
+        if (this.implConfig.enableMapPolling === true) {
+            clearTimeout(this.mapBootstrapTimer);
+            this.mapBootstrapTimer = setTimeout(() => this.pollMap(), 5000);
+            this.mapBootstrapTimer.unref();
+        }
     }
 
     onIncomingCloudMessage(msg) {
@@ -323,13 +333,28 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     }
 
     async executeMapPoll() {
-        if (this.implConfig.enableMapPolling !== true || this.authenticatedCloudMessages === 0) {
+        if (this.implConfig.enableMapPolling !== true || !this.dummyCloud.miioSocket.connected) {
             return;
         }
-        const result = await this.sendCommand("action", {did: this.deviceId, siid: 6, aiid: 1,
-            in: [{piid: 2, value: '{"frame_type":"I", "force_type":1, "req_type":1}'}]},
-        {timeout: 7000, interface: "cloud"});
+        // Bootstrap with a read-only encrypted map request. Waiting for a map
+        // notification before ever asking for a map deadlocks an idle SDK.
+        const peer = this.dummyCloud.miioSocket.rinfo?.address;
+        if (peer !== "127.0.0.1" && peer !== this.ip) {
+            this.mapLastError = "Map bridge peer is not this robot";
+            return;
+        }
+        this.mapLastPollAt = Date.now();
+        let result;
+        try {
+            result = await this.sendCommand("action", {did: this.deviceId, siid: 6, aiid: 1,
+                in: [{piid: 2, value: '{"frame_type":"I", "force_type":1, "req_type":1}'}]},
+            {timeout: 7000, interface: "cloud"});
+        } catch (e) {
+            this.mapLastError = "Local SDK map request was not acknowledged";
+            throw e;
+        }
         if (result?.code === 0 && Array.isArray(result.out)) {
+            this.mapLastError = null;
             for (const p of result.out) {
                 if (p.piid === 1 && typeof p.value === "string" && p.value.length > 15) {
                     await this.acceptMap(p.value);
@@ -344,6 +369,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         if (parsed) {
             this.state.map = parsed;
             this.mapFramesParsed++;
+            this.mapLastError = null;
             this.emitMapUpdated();
         }
     }
@@ -359,6 +385,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     }
 
     async shutdown() {
+        clearTimeout(this.mapBootstrapTimer);
         clearInterval(this.controlStateTimer);
         this.controlStateTimer = null;
         const manual = this.capabilities.HighResolutionManualControlCapability;
@@ -375,6 +402,8 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     getProperties() {
         return {experimental: true, controlsEnabled: this.implConfig.allowControls === true,
             cloudAuthenticatedMessages: this.authenticatedCloudMessages, mapFramesParsed: this.mapFramesParsed,
+            mapBridge: {connected: this.dummyCloud.miioSocket.connected,
+                lastPollAt: this.mapLastPollAt, lastError: this.mapLastError},
             diagnostics: this.lastDiagnostics, controlReadiness: this.getControlReadiness()};
     }
 

@@ -11,6 +11,7 @@ class Dummycloud {
      * @param {string} options.bindIP "127.0.0.1" on the robot, "0.0.0.0" in development
      * @param {() => void} options.onConnected  function to call after completing a handshake
      * @param {(msg: any) => boolean} options.onIncomingCloudMessage  function to call for incoming messages
+     * @param {boolean=} options.cloudNtpUsesUptime
      */
     constructor(options) {
         this.spoofedIP = options.spoofedIP;
@@ -38,7 +39,8 @@ class Dummycloud {
             rinfo: undefined,
             timeout: 2000,
             name: "cloud",
-            isCloudSocket: true
+            isCloudSocket: true,
+            cloudNtpUsesUptime: options.cloudNtpUsesUptime
         });
 
         this.onIncomingCloudMessage = options.onIncomingCloudMessage;
