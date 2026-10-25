@@ -59,7 +59,7 @@ class MiioSocket {
             ) {
                 this.deviceId = decodedIncomingPacket.deviceId;
 
-                Logger.info(`Got new DeviceID: ${this.deviceId}`);
+                Logger.info("Got new DeviceID; value redacted");
             }
 
             const msg = decodedIncomingPacket.msg;
@@ -114,7 +114,7 @@ class MiioSocket {
                                 fails to respond to a request from us in a timely fashion
                              */
                             if (msg["error"].message !== "user ack timeout") {
-                                Logger.info("Miio error response", msg);
+                                Logger.info("Miio error response; private payload redacted");
                             } else {
                                 Logger.trace("Miio error response", msg);
                             }
@@ -134,7 +134,7 @@ class MiioSocket {
                         Logger.debug("<< " + this.name + ": ignoring response for non-pending request", msg);
                     }
                 } else if (msg["error"]) {
-                    Logger.warn("unhandled error response", msg);
+                    Logger.warn("unhandled miIO error response; private payload redacted");
                 } else {
                     if (typeof this.onIncomingRequestMessage === "function") {
                         this.onIncomingRequestMessage(msg);

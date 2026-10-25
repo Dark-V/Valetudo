@@ -1,13 +1,13 @@
 const SpeakerVolumeControlCapability = require("../../../core/capabilities/SpeakerVolumeControlCapability");
 
 /**
- * @extends SpeakerVolumeControlCapability<import("../DreameValetudoRobot")>
+ * @extends SpeakerVolumeControlCapability<import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")>
  */
 class DreameSpeakerVolumeControlCapability extends SpeakerVolumeControlCapability {
 
     /**
      * @param {object} options
-     * @param {import("../DreameValetudoRobot")} options.robot
+     * @param {import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")} options.robot
      *
      * @param {number} options.siid MIOT Service ID
      * @param {number} options.piid MIOT Property ID

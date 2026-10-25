@@ -1,0 +1,9 @@
+{
+  "model": "xiaomi.vacuum.d103cn",
+  "publicMapIv": "OFULk9To37qRdXY3",
+  "source": "https://github.com/Tasshack/dreame-vacuum/blob/f5b8472b8e2e4bb3dff7bc2a81a5fd594eca9585/custom_components/dreame_vacuum/dreame/const.py",
+  "sourceSha256": "fec02516c08e55f2e21fc9edb043ecef8d1649229df36988a165e1be7eba0ae6",
+  "selection": "DEVICE_INFO: models['d103cn']=448; row=[1,1,23,6]; IV=key_table[6]",
+  "ownerSecret": false,
+  "realMapVerified": false
+}

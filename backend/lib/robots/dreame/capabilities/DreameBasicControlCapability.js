@@ -1,14 +1,14 @@
 const BasicControlCapability = require("../../../core/capabilities/BasicControlCapability");
 
 /**
- * @extends BasicControlCapability<import("../DreameValetudoRobot")>
+ * @extends BasicControlCapability<import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")>
  */
 class DreameBasicControlCapability extends BasicControlCapability {
     /**
      * The most basic functionalities
      *
      * @param {object} options
-     * @param {import("../DreameValetudoRobot")} options.robot
+     * @param {import("../DreameValetudoRobot") | import("../DreameMijiaM30SValetudoRobot")} options.robot
      *
      * @param {object} options.miot_actions
      * @param {object} options.miot_actions.start
