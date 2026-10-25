@@ -52,6 +52,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.savedMapError = null;
         this.lastLiveMapAt = 0;
         this.pollInFlight = null;
+        this.stationActionPending = false;
         this.camera = new D103CNCamera(this);
         const manualUdp = dgram.createSocket("udp4");
         manualUdp.bind(0, this.ip);
@@ -139,6 +140,12 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             (args.siid === 3 && args.aiid === 1) || (args.siid === 4 && args.aiid === 1)) ? this.camera.stop() : Promise.resolve();
         const isManual = method === "set_properties" && Array.isArray(args) &&
             args.length === 1 && args[0].siid === 4 && args[0].piid === 15;
+        const stationAction = method === "action" && ((args.siid === 4 && args.aiid === 4) || (args.siid === 15 && args.aiid === 1));
+        const pointAction = method === "action" && args.siid === 4 && args.aiid === 1 && args.in.some(p => p.piid === 1 && p.value === 23);
+        if (stationAction || pointAction || (this.stationActionPending && method === "action" && args.siid === 4 && args.aiid === 2)) {
+            // A station/nav action with a lost ACK must not be blindly replayed.
+            options = {...options, timeout: 2000, noRetry: true};
+        }
         return prepare.then(() => isManual ? this.sendManualTransport(method, args, options.timeout ?? 350) :
             super.sendCommand(method, args,
                 {...options, interface: method === "action" && args.siid === 6 && args.aiid === 1 ? "cloud" : "local"}))
@@ -233,6 +240,22 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         }
     }
 
+    /** Bounded, read-only preflight; never joins a potentially retrying UI poll. */
+    async refreshDockState() {
+        const pairs = [[2, 1], [2, 2], [3, 1], [3, 2], [4, 25], [15, 5], [4, 53], [4, 6], [27, 1], [27, 2], [27, 3]];
+        const properties = [];
+        for (let i = 0; i < pairs.length; i += 8) {
+            const batch = pairs.slice(i, i + 8);
+            const result = await this.sendCommand("get_properties", batch.map(([siid, piid]) => ({did: this.deviceId, siid: siid, piid: piid})),
+                {timeout: 1000, noRetry: true});
+            if (!Array.isArray(result) || !batch.every(([s, p]) => result.some(row => row.siid === s && row.piid === p && row.code === 0 && Number.isInteger(row.value)))) {
+                throw new Error("Station state or attachment telemetry is incomplete; no action sent");
+            }
+            properties.push(...result);
+        }
+        this.parseAndUpdateState(properties);
+    }
+
     /**
      * Refresh only status/fault, independent of which UI page is open.
      * @param {{noRetry?: boolean, force?: boolean}} options Read-only camera startup may handshake after idle.
@@ -294,13 +317,14 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         const age = performance.now() - Math.min(this.lastStateAt, this.lastFaultAt);
         const dock = this.state.getFirstMatchingAttribute({attributeClass: "DockStatusStateAttribute"})?.value;
         const stationBusy = ["drying", "cleaning", "emptying"].includes(dock);
-        const ready = effectiveFault === 0 && !stationBusy && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000;
+        const ready = effectiveFault === 0 && !stationBusy && !this.stationActionPending && [2, 3, 6, 13, 21, 23].includes(status) && age <= 10000;
         const stationReason = ({drying: "Mops are drying", cleaning: "The station is washing the mops",
             emptying: "The station is emptying the dustbin", pause: "The station operation is paused"})[dock];
-        const reason = ready ? null : age > 10000 ? "Robot state is stale; waiting for fresh telemetry" :
-            effectiveFault > 0 ? `Robot fault ${effectiveFault}; check the robot` :
-                stationReason ? `${stationReason}; manual driving is unavailable during station work` :
-                    "Manual driving requires an idle, paused or docked robot";
+        const reason = ready ? null : this.stationActionPending ? "A station request is awaiting acknowledgement" :
+            age > 10000 ? "Robot state is stale; waiting for fresh telemetry" :
+                effectiveFault > 0 ? `Robot fault ${effectiveFault}; check the robot` :
+                    stationReason ? `${stationReason}; manual driving is unavailable during station work` :
+                        "Manual driving requires an idle, paused or docked robot";
         return {status: status ?? null, fault: fault ?? null, effectiveFault: effectiveFault ?? null,
             dockMopReminder: dockMopReminder,
             ageMs: Number.isFinite(age) ? Math.round(age) : null,
@@ -373,6 +397,19 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                 ...(value === "drying" && Number.isInteger(progress) && progress >= 0 && progress <= 100 ?
                     {dryingProgressPercent: progress} : {})
             }}));
+        }
+        if ([0, 1].includes(parsed.attachments.mop)) {
+            this.state.upsertFirstMatchingAttribute(new attrs.AttachmentStateAttribute({type: "mop", attached: parsed.attachments.mop === 0}));
+        }
+        if (Number.isInteger(parsed.attachments.watertank) && parsed.attachments.watertank >= 0) {
+            this.state.upsertFirstMatchingAttribute(new attrs.AttachmentStateAttribute({type: "watertank", attached: parsed.attachments.watertank !== 0}));
+        }
+        for (const [type, raw] of Object.entries(parsed.dockComponents)) {
+            const values = type === "water_tank_clean" ? {0: "ok", 1: "missing", 2: "empty"} :
+                type === "water_tank_dirty" ? {0: "ok", 1: "full"} : {0: "ok", 1: "missing", 2: "full"};
+            if (Number.isInteger(raw)) {
+                this.state.upsertFirstMatchingAttribute(new attrs.DockComponentStateAttribute({type: type, value: values[raw] ?? "unknown"}));
+            }
         }
         this.lastDiagnostics = parsed.diagnostics;
         this.emitStateAttributesUpdated();
@@ -509,6 +546,9 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     getManufacturer() {
         return "Xiaomi";
+    }
+    getModelDetails() {
+        return {supportedAttachments: ["mop", "watertank"], supportedDockComponents: ["water_tank_clean", "water_tank_dirty", "dustbag"]};
     }
 
     async shutdown() {

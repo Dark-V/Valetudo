@@ -1,4 +1,8 @@
 const capabilities = require("./capabilities");
+const D103CNAutoEmptyDockManualTriggerCapability = require("./capabilities/D103CNAutoEmptyDockManualTriggerCapability");
+const D103CNGoToLocationCapability = require("./capabilities/D103CNGoToLocationCapability");
+const D103CNMopDockCleanManualTriggerCapability = require("./capabilities/D103CNMopDockCleanManualTriggerCapability");
+const D103CNMopDockDryManualTriggerCapability = require("./capabilities/D103CNMopDockDryManualTriggerCapability");
 const D103CNSpotCleaningCapability = require("./capabilities/D103CNSpotCleaningCapability");
 const ValetudoMapAnnotation = require("../../entities/core/ValetudoMapAnnotation");
 const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZone");
@@ -10,6 +14,10 @@ const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZo
  */
 function registerFeatures(robot) {
     robot.registerCapability(new D103CNSpotCleaningCapability({robot: robot}));
+    robot.registerCapability(new D103CNGoToLocationCapability({robot: robot}));
+    robot.registerCapability(new D103CNMopDockCleanManualTriggerCapability({robot: robot}));
+    robot.registerCapability(new D103CNMopDockDryManualTriggerCapability({robot: robot}));
+    robot.registerCapability(new D103CNAutoEmptyDockManualTriggerCapability({robot: robot}));
     const dreame = /** @type {import("./DreameValetudoRobot")} */ (/** @type {unknown} */ (robot));
     const task = {
         robot: dreame,
