@@ -7,13 +7,16 @@ class CarpetMapStructure extends MapStructure {
     private static patternSourceCanvas: HTMLCanvasElement | null = null;
 
     private readonly points: Array<{x: number, y: number}>;
+    private readonly ignored: boolean;
 
 
     constructor(
-        points: Array<{x: number, y: number}>
+        points: Array<{x: number, y: number}>,
+        ignored = false
     ) {
         super(points[0].x, points[0].y); // Doesn't really make sense here, but whatever
         this.points = points;
+        this.ignored = ignored;
     }
 
     draw(ctxWrapper: Canvas2DContextTrackingWrapper, transformationMatrixToScreenSpace: DOMMatrixInit, scaleFactor: number): void {
@@ -36,7 +39,13 @@ class CarpetMapStructure extends MapStructure {
         }
         ctx.closePath();
 
-        const pattern = this.getPattern(ctx);
+        const pattern = this.ignored ? null : this.getPattern(ctx);
+        if (this.ignored) {
+            ctx.strokeStyle = "rgba(6, 182, 212, 0.9)";
+            ctx.lineWidth = considerHiDPI(2);
+            ctx.setLineDash([considerHiDPI(4), considerHiDPI(3)]);
+            ctx.stroke();
+        }
         if (pattern) {
             const mapMatrix = DOMMatrix.fromMatrix(transformationMatrixToScreenSpace);
 

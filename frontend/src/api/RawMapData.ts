@@ -16,6 +16,9 @@ export interface RawMapEntity {
 }
 
 export interface RawMapEntityMetaData {
+    source?: string;
+    ignored?: boolean;
+    carpetType?: number;
     angle?: number;
     label?: string;
     id?: string;
@@ -41,6 +44,7 @@ export interface RawMapLayerDimension {
 }
 
 export interface RawMapLayerMetaData {
+    carpetPixels?: number[];
     area: number;
     segmentId?: string;
     name?: string;
@@ -85,4 +89,7 @@ export enum RawMapEntityType {
 export interface RawMapDataMetaData {
     version: number;
     nonce: string;
+    savedMapSnapshot?: boolean;
+    mapId?: string;
+    savedAt?: string;
 }

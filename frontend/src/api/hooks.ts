@@ -59,6 +59,7 @@ import {
     sendConsumableReset,
     sendDoNotDisturbConfiguration,
     sendGoToCommand,
+    sendSpotCleaningCommand,
     sendHTTPBasicAuthConfiguration,
     sendJoinSegmentsCommand,
     sendKeyLockEnable,
@@ -497,6 +498,23 @@ export const useGoToMutation = (
             });
             await options?.onSuccess?.(data, ...args);
         },
+    });
+};
+
+export const useSpotCleaningMutation = (
+    options?: UseMutationOptions<RobotAttribute[], unknown, import("./types").SpotActionRequestParameters>
+) => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (parameters: import("./types").SpotActionRequestParameters) => {
+            return sendSpotCleaningCommand(parameters).then(fetchStateAttributes);
+        },
+        ...options,
+        onError: useOnCommandError(Capability.SpotCleaning),
+        onSuccess: async (data, ...args) => {
+            queryClient.setQueryData<RobotAttribute[]>([QueryKey.Attributes], data, {updatedAt: Date.now()});
+            await options?.onSuccess?.(data, ...args);
+        }
     });
 };
 
@@ -1308,8 +1326,8 @@ export const useHighResolutionManualControlStateQuery = () => {
         queryKey: [QueryKey.HighResolutionManualControl],
         queryFn: fetchHighResolutionManualControlState,
 
-        staleTime: 10_000,
-        refetchInterval: 10_000
+        staleTime: 1000,
+        refetchInterval: 1000
     });
 };
 

@@ -92,6 +92,20 @@ class DreameMapParser {
             if (additionalData.curid !== undefined) {
                 metaData.vendorMapId = parseInt(additionalData.curid);
             }
+            if (additionalData.vw && Array.isArray(additionalData.vw.addcpt) && Array.isArray(additionalData.vw.nocpt)) {
+                metaData.carpetEditingSupported = true;
+                for (const [key, source] of [["addcpt", "manual"], ["nocpt", "ignored"]]) {
+                    for (const [index, rectangle] of additionalData.vw[key].entries()) {
+                        if (!Array.isArray(rectangle) || rectangle.length < 4 || !rectangle.slice(0, 4).every(Number.isFinite)) {
+                            continue;
+                        }
+                        const carpet = DreameMapParser.PARSE_AREAS(parsedHeader, [rectangle], mapEntities.PolygonMapEntity.TYPE.CARPET)[0];
+                        carpet.metaData = {id: `${source}_${rectangle[4] ?? index}`, source: source,
+                            ignored: source === "ignored", carpetType: rectangle[5]};
+                        entities.push(carpet);
+                    }
+                }
+            }
 
             if (additionalData.seg_inf) {
                 Object.keys(additionalData.seg_inf).forEach(segmentId => {
@@ -151,6 +165,9 @@ class DreameMapParser {
                 const rismResult = await DreameMapParser.PARSE(await DreameMapParser.PREPROCESS(additionalData.rism), MAP_DATA_TYPES.RISM);
 
                 if (rismResult instanceof mapEntities.ValetudoMap) {
+                    if (rismResult.metaData.carpetEditingSupported === true) {
+                        metaData.carpetEditingSupported = true;
+                    }
                     rismResult.entities.forEach(e => {
                         if (e instanceof mapEntities.PointMapEntity) {
                             if (e.type === mapEntities.PointMapEntity.TYPE.ROBOT_POSITION && parsedHeader.robot_position.valid === false) {
@@ -199,6 +216,10 @@ class DreameMapParser {
                                     layers.find(eL => {
                                         return eL.metaData.segmentId === l.metaData.segmentId;
                                     }).metaData.material = l.metaData.material;
+                                }
+                                if (Array.isArray(l.metaData.carpetPixels)) {
+                                    layers.find(eL => eL.metaData.segmentId === l.metaData.segmentId)
+                                        .metaData.carpetPixels = l.metaData.carpetPixels;
                                 }
                             }
                         } else {
@@ -504,6 +525,8 @@ class DreameMapParser {
         const floorPixels = [];
         const wallPixels = [];
         const segments = {};
+        const segmentCarpetPixels = {};
+        const floorCarpetPixels = [];
 
         const layers = [];
 
@@ -544,6 +567,9 @@ class DreameMapParser {
                         }
 
                         segments[segmentId].push(coords);
+                        if ((px & 0b00000011) === PIXEL_TYPES.CARPET) {
+                            (segmentCarpetPixels[segmentId] ??= []).push(coords);
+                        }
                     } else {
                         switch (px & 0b00000011) {
                             case PIXEL_TYPES.NONE:
@@ -551,6 +577,9 @@ class DreameMapParser {
                             case PIXEL_TYPES.FLOOR:
                             case PIXEL_TYPES.CARPET:
                                 floorPixels.push(coords);
+                                if ((px & 0b00000011) === PIXEL_TYPES.CARPET) {
+                                    floorCarpetPixels.push(coords);
+                                }
                                 break;
                             case PIXEL_TYPES.WALL:
                                 wallPixels.push(coords);
@@ -570,10 +599,7 @@ class DreameMapParser {
                     const segmentId = px & 0b00111111;
                     const wallFlag = px >> 7;
 
-                    /*
-                        TODO: figure out what to do with the carpet information
-                        px >> 6 & 0b00000001
-                    */
+                    const carpetFlag = (px >> 6) & 0b00000001;
 
                     if (wallFlag) {
                         wallPixels.push(coords);
@@ -583,6 +609,9 @@ class DreameMapParser {
                         }
 
                         segments[segmentId].push(coords);
+                        if (carpetFlag) {
+                            (segmentCarpetPixels[segmentId] ??= []).push(coords);
+                        }
                     }
                 }
             }
@@ -592,7 +621,10 @@ class DreameMapParser {
             layers.push(
                 new mapEntities.MapLayer({
                     pixels: floorPixels.sort(mapEntities.MapLayer.COORDINATE_TUPLE_SORT).flat(),
-                    type: mapEntities.MapLayer.TYPE.FLOOR
+                    type: mapEntities.MapLayer.TYPE.FLOOR,
+                    metaData: floorCarpetPixels.length > 0 ? {
+                        carpetPixels: floorCarpetPixels.sort(mapEntities.MapLayer.COORDINATE_TUPLE_SORT).flat()
+                    } : {}
                 })
             );
         }
@@ -619,6 +651,9 @@ class DreameMapParser {
 
             if (segmentMaterials[segmentId]) {
                 metaData.material = segmentMaterials[segmentId];
+            }
+            if (segmentCarpetPixels[segmentId]?.length > 0) {
+                metaData.carpetPixels = segmentCarpetPixels[segmentId].sort(mapEntities.MapLayer.COORDINATE_TUPLE_SORT).flat();
             }
 
             layers.push(

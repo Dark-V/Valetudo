@@ -59,6 +59,7 @@ import {
     SetQuirkValueCommand,
     SimpleToggleState,
     SpeakerVolumeState,
+    SpotActionRequestParameters,
     StatisticsProperties,
     SystemHostInfo,
     SystemRuntimeInfo,
@@ -278,6 +279,14 @@ export const sendGoToCommand = async (point: Point): Promise<void> => {
             coordinates: floorObject(point),
         }
     );
+};
+
+export const sendSpotCleaningCommand = async (parameters: SpotActionRequestParameters): Promise<void> => {
+    await valetudoAPI.put(`/robot/capabilities/${Capability.SpotCleaning}`, {
+        action: "clean",
+        coordinates: floorObject(parameters.coordinates),
+        iterations: parameters.iterations ?? 1
+    });
 };
 
 export const fetchZoneProperties = async (): Promise<ZoneProperties> => {

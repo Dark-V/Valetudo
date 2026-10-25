@@ -309,6 +309,14 @@ export function PROCESS_LAYERS(layers: Array<RawMapLayer>, pixelSize: number, pa
         if (layer.metaData.material) {
             pixelPatternHandler = materialToPixelPatternHandler[layer.metaData.material] ?? fallbackPixelPatternHandler;
         }
+        // Native carpet pixels retain their room color and hit-test identity.
+        // Reuse the existing carpet texture instead of painting another floor
+        // layer over the room and losing segment selection under the carpet.
+        const carpetPixels = new Set<string>();
+        const carpetCoordinates = layer.metaData.carpetPixels ?? [];
+        for (let i = 0; i + 1 < carpetCoordinates.length; i += 2) {
+            carpetPixels.add(`${carpetCoordinates[i]}:${carpetCoordinates[i+1]}`);
+        }
 
         for (let i = 0; i < layer.pixels.length; i = i + 2) {
             const offset = (
@@ -320,7 +328,8 @@ export function PROCESS_LAYERS(layers: Array<RawMapLayer>, pixelSize: number, pa
             const pixelX = layer.pixels[i];
             const pixelY = layer.pixels[i+1];
 
-            const pixelColor = pixelPatternHandler(pixelX, pixelY) ? accentColor : color;
+            const patternHandler = carpetPixels.size > 0 && carpetPixels.has(`${pixelX}:${pixelY}`) ? carpetPixelPatternHandler : pixelPatternHandler;
+            const pixelColor = patternHandler(pixelX, pixelY) ? accentColor : color;
 
             pixelData[imgDataOffset] = pixelColor.r;
             pixelData[imgDataOffset + 1] = pixelColor.g;

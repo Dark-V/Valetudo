@@ -1,5 +1,6 @@
 const capabilities = require("./capabilities");
 const D103CNSpotCleaningCapability = require("./capabilities/D103CNSpotCleaningCapability");
+const ValetudoMapAnnotation = require("../../entities/core/ValetudoMapAnnotation");
 const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZone");
 
 /**
@@ -30,6 +31,9 @@ function registerFeatures(robot) {
     robot.registerCapability(new capabilities.DreameMapSegmentEditCapability(map));
     robot.registerCapability(new capabilities.DreameMapSegmentRenameCapability(map));
     robot.registerCapability(new capabilities.DreameMapResetCapability(map));
+    robot.registerCapability(new capabilities.DreameMapAnnotationsCapability({...map,
+        supportedAnnotationTypes: [ValetudoMapAnnotation.TYPE.CARPET, ValetudoMapAnnotation.TYPE.CARPET_IGNORED]
+    }));
     robot.registerCapability(new capabilities.DreameCombinedVirtualRestrictionsCapability({
         ...map, supportedRestrictedZoneTypes: [ValetudoRestrictedZone.TYPE.REGULAR, ValetudoRestrictedZone.TYPE.MOP]
     }));

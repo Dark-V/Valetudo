@@ -39,9 +39,52 @@ class DreameMapAnnotationsCapability extends MapAnnotationsCapability {
      */
     async setMapAnnotations(mapAnnotations) {
         const dreamePayload = {};
+        if (mapAnnotations.some(a => !this.supportedAnnotationTypes.includes(a.type))) {
+            throw new Error("Unsupported annotation type");
+        }
+        if (this.supportedAnnotationTypes.includes(ValetudoMapAnnotation.TYPE.CARPET) &&
+            this.robot.state.map.metaData.carpetEditingSupported !== true) {
+            throw new Error("The current native map has not reported editable carpet areas");
+        }
 
         for (const type of this.supportedAnnotationTypes) {
             switch (type) {
+                case ValetudoMapAnnotation.TYPE.CARPET:
+                case ValetudoMapAnnotation.TYPE.CARPET_IGNORED: {
+                    dreamePayload.cpt ??= {addcpt: [], nocpt: []};
+                    const items = mapAnnotations.filter(a => a.type === type);
+                    if (items.length > 20) {
+                        throw new Error("Too many carpet areas");
+                    }
+                    for (const [index, annotation] of items.entries()) {
+                        if (annotation.points.length !== 2) {
+                            throw new Error("Carpet areas require two opposite corners");
+                        }
+                        const [a, b] = annotation.points.map(p => DreameMapParser.CONVERT_TO_DREAME_COORDINATES(p.x, p.y));
+                        if (![a.x, a.y, b.x, b.y].every(n => Number.isFinite(n) && n >= -32768 && n <= 32767) ||
+                            Math.round(a.x) === Math.round(b.x) || Math.round(a.y) === Math.round(b.y)) {
+                            throw new Error("Invalid carpet rectangle");
+                        }
+                        const row = [Math.round(Math.min(a.x, b.x)), Math.round(Math.min(a.y, b.y)),
+                            Math.round(Math.max(a.x, b.x)), Math.round(Math.max(a.y, b.y))];
+                        const manual = type === ValetudoMapAnnotation.TYPE.CARPET;
+                        if (manual) {
+                            row.push(index + 1);
+                        }
+                        const carpetType = annotation.metaData?.carpetType;
+                        if (carpetType !== undefined) {
+                            if (!Number.isInteger(carpetType) || carpetType < 0 || carpetType > 255) {
+                                throw new Error("Invalid carpet type");
+                            }
+                            if (!manual) {
+                                row.push(0);
+                            }
+                            row.push(carpetType);
+                        }
+                        (manual ? dreamePayload.cpt.addcpt : dreamePayload.cpt.nocpt).push(row);
+                    }
+                    break;
+                }
                 case ValetudoMapAnnotation.TYPE.THRESHOLD: {
                     if (dreamePayload.vws === undefined) {
                         dreamePayload.vws = {};

@@ -12,7 +12,8 @@ class MapAnnotationsCapabilityRouter extends CapabilityRouter {
             for (const rawAnnotation of req.body) {
                 mapAnnotations.push(new ValetudoMapAnnotation({
                     type: rawAnnotation.type,
-                    points: rawAnnotation.points.map(p => ({ x: p.x, y: p.y }))
+                    points: rawAnnotation.points.map(p => ({ x: p.x, y: p.y })),
+                    metaData: rawAnnotation.metaData
                 }));
             }
 

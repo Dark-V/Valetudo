@@ -26,12 +26,14 @@ const LiveMapPage = (props: Record<string, never> ): React.ReactElement => {
 
     const [
         goToLocationCapabilitySupported,
+        spotCleaningCapabilitySupported,
         mapSegmentationCapabilitySupported,
         zoneCleaningCapabilitySupported,
 
         obstacleImagesSupported,
     ] = useCapabilitiesSupported(
         Capability.GoToLocation,
+        Capability.SpotCleaning,
         Capability.MapSegmentation,
         Capability.ZoneCleaning,
 
@@ -96,7 +98,8 @@ const LiveMapPage = (props: Record<string, never> ): React.ReactElement => {
         supportedCapabilities={{
             [Capability.MapSegmentation]: mapSegmentationCapabilitySupported,
             [Capability.ZoneCleaning]: zoneCleaningCapabilitySupported,
-            [Capability.GoToLocation]: goToLocationCapabilitySupported
+            [Capability.GoToLocation]: goToLocationCapabilitySupported,
+            [Capability.SpotCleaning]: spotCleaningCapabilitySupported
         }}
     />;
 };
