@@ -1,13 +1,16 @@
 const attrs = require("../../entities/state/attributes");
 const capabilities = require("./capabilities");
+const crypto = require("crypto");
 const D103 = require("./D103CNProtocol");
-const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103CNCamera = require("./D103CNCamera");
+const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
+const dgram = require("dgram");
 const DreameMapParser = require("./DreameMapParser");
 const DreameMiotHelper = require("./DreameMiotHelper");
 const fs = require("fs");
 const Logger = require("../../Logger");
+const MiioSocket = require("../../miio/MiioSocket");
 const MiioValetudoRobot = require("../MiioValetudoRobot");
 const ValetudoRobotError = require("../../entities/core/ValetudoRobotError");
 const ValetudoSelectionPreset = require("../../entities/core/ValetudoSelectionPreset");
@@ -33,6 +36,15 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.mapFramesParsed = 0;
         this.pollInFlight = null;
         this.camera = new D103CNCamera(this);
+        const manualUdp = dgram.createSocket("udp4");
+        manualUdp.bind(0, this.ip);
+        this.manualSocketError = false;
+        manualUdp.on("error", () => {
+            this.manualSocketError = true;
+        });
+        this.manualSocket = new MiioSocket({socket: manualUdp, token: this.localSecret,
+            deviceId: this.deviceId, rinfo: {address: this.ip, port: MiioSocket.PORT},
+            timeout: 350, name: "d103-manual", isCloudSocket: false});
 
         if (this.implConfig.allowControls === true) {
             this.registerCapability(new capabilities.DreameBasicControlCapability({
@@ -91,11 +103,59 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         // State/control uses the already verified local interface. A connected UDP socket is not auth proof.
         const prepare = method === "action" && ((args.siid === 2 && args.aiid === 1) ||
             (args.siid === 3 && args.aiid === 1)) ? this.camera.stop() : Promise.resolve();
-        return prepare.then(() => super.sendCommand(method, args,
-            {...options, interface: method === "action" && args.siid === 6 ? "cloud" : "local"}))
-            .catch(() => {
-                throw new Error("D103CN miIO request failed; private response redacted");
+        const isManual = method === "set_properties" && Array.isArray(args) &&
+            args.length === 1 && args[0].siid === 4 && args[0].piid === 15;
+        return prepare.then(() => isManual ? this.sendManualTransport(method, args, options.timeout ?? 350) :
+            super.sendCommand(method, args,
+                {...options, interface: method === "action" && args.siid === 6 ? "cloud" : "local"}))
+            .catch(e => {
+                const reason = e?.constructor?.name === "MiioTimeoutError" ? "timeout" :
+                    e?.constructor?.name === "RetryWrapperSurrenderError" ? "telemetry channel busy or stamp invalid" : "request rejected";
+                throw new Error(`D103CN ${isManual ? "manual" : "miIO"} request failed: ${reason}; private response redacted`);
             });
+    }
+
+    /**
+     * Independent authenticated UDP transactions. No telemetry mutex, queues or retries.
+     * Reuses a recent stamp obtained by authenticated local requests, never an invented handshake.
+     * @param {string} method
+     * @param {Array} args
+     * @param {number} timeout
+     */
+    sendManualTransport(method, args, timeout) {
+        if (!D103.commandAllowed(method, args, this.implConfig) || this.manualSocketError ||
+            Object.keys(this.manualSocket.pendingRequests).length !== 0) {
+            return Promise.reject(new Error("D103CN dedicated manual transport unavailable or busy"));
+        }
+        const normalStamp = this.localSocket.miioSocket.codec.stamp;
+        if (normalStamp.isValid()) {
+            this.manualSocket.codec.stamp = normalStamp;
+        }
+        if (!this.manualSocket.codec.stamp.isValid()) {
+            return Promise.reject(new Error("D103CN manual transport requires a fresh authenticated stamp"));
+        }
+        const token = this.localSecret;
+        if (!this.manualSocket.codec.token.equals(token)) {
+            this.manualSocket.codec.setToken(token);
+        }
+        return this.manualSocket.sendMessage({id: crypto.randomInt(1, 0x7fffffff), method: method, params: args}, {timeout: timeout});
+    }
+
+    /** Read-only hardware check of both independent channels; no manual enable or motor payload. */
+    async probeManualTransport() {
+        await this.refreshControlState();
+        const properties = [1, 2].map(piid => ({did: this.deviceId, siid: 2, piid: piid}));
+        const started = performance.now();
+        const responses = await Promise.all([
+            this.sendCommand("get_properties", properties, {timeout: 700, noRetry: true}),
+            this.sendManualTransport("get_properties", properties, 700)
+        ]);
+        if (!responses.every(response => Array.isArray(response) && response.length === 2 &&
+            response.every(p => p.code === 0 && Number.isInteger(p.value)))) {
+            throw new Error("D103CN parallel channel readback incomplete");
+        }
+        return {independentTransport: true, authenticatedReadback: true,
+            latencyMs: Math.round(performance.now() - started), motorPayloadsSent: false};
     }
 
     sendCloud(msg, options = {}) {
@@ -303,6 +363,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             await manual.disableManualControl().catch(() => Logger.warn("D103CN shutdown stop was not acknowledged"));
         }
         await this.camera.stop().catch(() => Logger.warn("D103CN camera shutdown restoration was not acknowledged"));
+        await this.manualSocket.shutdown();
         await super.shutdown();
     }
     getModelName() {
