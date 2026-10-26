@@ -33,6 +33,7 @@ module.exports = {
     SpeakerTestCapabilityRouter: require("./SpeakerTestCapabilityRouter"),
     SpeakerVolumeControlCapabilityRouter: require("./SpeakerVolumeControlCapabilityRouter"),
     SpotCleaningCapabilityRouter: require("./SpotCleaningCapabilityRouter"),
+    CleaningHistoryCapabilityRouter: require("./CleaningHistoryCapabilityRouter"),
     StatisticsCapabilityRouter: require("./StatisticsCapabilityRouter"),
     VoicePackManagementCapabilityRouter: require("./VoicePackManagementCapabilityRouter"),
     WifiConfigurationCapabilityRouter: require("./WifiConfigurationCapabilityRouter"),

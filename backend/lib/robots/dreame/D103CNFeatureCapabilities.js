@@ -1,5 +1,6 @@
 const capabilities = require("./capabilities");
 const D103CNAutoEmptyDockManualTriggerCapability = require("./capabilities/D103CNAutoEmptyDockManualTriggerCapability");
+const D103CNCleaningHistoryCapability = require("./capabilities/D103CNCleaningHistoryCapability");
 const D103CNGoToLocationCapability = require("./capabilities/D103CNGoToLocationCapability");
 const D103CNMopDockCleanManualTriggerCapability = require("./capabilities/D103CNMopDockCleanManualTriggerCapability");
 const D103CNMopDockDryManualTriggerCapability = require("./capabilities/D103CNMopDockDryManualTriggerCapability");
@@ -13,6 +14,7 @@ const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZo
  * @param {import("./DreameMijiaM30SValetudoRobot")} robot
  */
 function registerFeatures(robot) {
+    robot.registerCapability(new D103CNCleaningHistoryCapability({robot: robot}));
     robot.registerCapability(new D103CNSpotCleaningCapability({robot: robot}));
     robot.registerCapability(new D103CNGoToLocationCapability({robot: robot}));
     robot.registerCapability(new D103CNMopDockCleanManualTriggerCapability({robot: robot}));

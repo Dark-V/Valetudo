@@ -12,6 +12,7 @@ export enum Capability {
     CollisionAvoidantNavigation = "CollisionAvoidantNavigationControlCapability",
     CombinedVirtualRestrictions = "CombinedVirtualRestrictionsCapability",
     ConsumableMonitoring = "ConsumableMonitoringCapability",
+    CleaningHistory = "CleaningHistoryCapability",
     CurrentStatistics = "CurrentStatisticsCapability",
     DoNotDisturb = "DoNotDisturbCapability",
     FanSpeedControl = "FanSpeedControlCapability",
@@ -703,4 +704,20 @@ export interface AutoEmptyDockAutoEmptyDurationPayload {
 
 export interface AutoEmptyDockAutoEmptyDurationControlProperties {
     supportedDurations: Array<AutoEmptyDockAutoEmptyDuration>,
+}
+
+export interface CleaningHistoryPage {
+    records: {
+        id: string;
+        startedAt: number;
+        duration: number;
+        area: number;
+        completed: boolean | null;
+        nativeMode: number;
+    }[];
+    total: number;
+    offset: number;
+    limit: number;
+    skippedRecords: number;
+    hasMore: boolean;
 }
