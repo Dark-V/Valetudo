@@ -23,6 +23,7 @@ export enum Capability {
     Locate = "LocateCapability",
     ManualControl = "ManualControlCapability",
     MaintenanceReminder = "MaintenanceReminderCapability",
+    RoomProfiles = "RoomProfilesCapability",
     HighResolutionManualControl = "HighResolutionManualControlCapability",
     MapReset = "MapResetCapability",
     MapSegmentEdit = "MapSegmentEditCapability",
@@ -93,6 +94,7 @@ export interface ZoneProperties {
 }
 
 export interface MapSegmentationProperties {
+    roomProfilesSupported?: boolean;
     iterationCount: {
         min: number;
         max: number;
@@ -208,6 +210,7 @@ export interface MapSegmentationActionRequestParameters {
     segment_ids: string[];
     iterations?: number;
     customOrder?: boolean;
+    useProfiles?: boolean;
 }
 
 export interface MapSegmentEditJoinRequestParameters {
@@ -517,6 +520,8 @@ export interface WifiStatus {
 
 export interface WifiConfigurationProperties {
     provisionedReconfigurationSupported: boolean;
+    recoverySupported?: boolean;
+    recovery?: {connectTimeoutSeconds: number; rollbackTimeoutSeconds: number; fallbackAddress: string; phase: string};
 }
 
 export interface ValetudoWifiNetwork {

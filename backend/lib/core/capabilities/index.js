@@ -21,6 +21,7 @@ module.exports = {
     KeyLockCapability: require("./KeyLockCapability"),
     LocateCapability: require("./LocateCapability"),
     MaintenanceReminderCapability: require("./MaintenanceReminderCapability"),
+    RoomProfilesCapability: require("./RoomProfilesCapability"),
     ManualControlCapability: require("./ManualControlCapability"),
     MapAnnotationsCapability: require("./MapAnnotationsCapability"),
     MapResetCapability: require("./MapResetCapability"),

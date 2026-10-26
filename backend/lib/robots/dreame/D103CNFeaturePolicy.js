@@ -1,6 +1,6 @@
 /* Native D103CN feature contracts. No transport, setters or emulated device. */
 const READ_PROPERTIES = Object.freeze([
-    [4, 12], [4, 27], [4, 28], [4, 33], [4, 36],
+    [4, 12], [4, 26], [4, 27], [4, 28], [4, 33], [4, 36],
     [5, 1], [5, 2], [5, 3], [9, 1], [10, 1], [11, 2], [18, 1],
     [4, 40], [12, 2], [12, 3], [12, 4]
 ]);

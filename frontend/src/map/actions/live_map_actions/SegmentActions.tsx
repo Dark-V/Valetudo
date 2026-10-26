@@ -1,6 +1,7 @@
 import {Capability, useCleanSegmentsMutation, useMapSegmentationPropertiesQuery, useRobotStatusQuery} from "../../../api";
 import React from "react";
-import {Box, Button, CircularProgress, Container, Grid2, Typography} from "@mui/material";
+import {Box, Button, Checkbox, CircularProgress, Container, FormControlLabel, Grid2, Typography} from "@mui/material";
+import {Link} from "react-router-dom";
 import {ActionButton} from "../../Styled";
 import IntegrationHelpDialog from "../../../components/IntegrationHelpDialog";
 import {useLongPress} from "use-long-press";
@@ -21,6 +22,7 @@ const SegmentActions = (
 ): React.ReactElement => {
     const {segments, onClear} = props;
     const [iterationCount, setIterationCount] = React.useState(1);
+    const [useProfiles, setUseProfiles] = React.useState(true);
     const [integrationHelpDialogOpen, setIntegrationHelpDialogOpen] = React.useState(false);
     const [integrationHelpDialogPayload, setIntegrationHelpDialogPayload] = React.useState("");
 
@@ -52,20 +54,22 @@ const SegmentActions = (
         executeSegmentAction({
             segment_ids: segments,
             iterations: iterationCount,
+            ...(mapSegmentationProperties?.roomProfilesSupported ? {useProfiles: useProfiles} : {}),
             customOrder: mapSegmentationProperties?.customOrderSupport
         });
-    }, [canClean, didSelectSegments, executeSegmentAction, segments, iterationCount, mapSegmentationProperties]);
+    }, [canClean, didSelectSegments, executeSegmentAction, segments, iterationCount, mapSegmentationProperties, useProfiles]);
 
     const handleLongClick = React.useCallback(() => {
         setIntegrationHelpDialogPayload(JSON.stringify({
             action: "start_segment_action",
             segment_ids: segments,
             iterations: iterationCount ?? 1,
+            ...(mapSegmentationProperties?.roomProfilesSupported ? {useProfiles: useProfiles} : {}),
             customOrder: mapSegmentationProperties?.customOrderSupport ?? false
         }, null, 2));
 
         setIntegrationHelpDialogOpen(true);
-    }, [segments, iterationCount, mapSegmentationProperties]);
+    }, [segments, iterationCount, mapSegmentationProperties, useProfiles]);
 
     const setupClickHandlers = useLongPress(
         handleLongClick,
@@ -124,6 +128,11 @@ const SegmentActions = (
 
     return (
         <>
+            {mapSegmentationProperties.roomProfilesSupported && <Box>
+                <FormControlLabel label="Use room profiles" control={<Checkbox checked={useProfiles}
+                    onChange={(_, checked) => setUseProfiles(checked)}/>}/>
+                <Button component={Link} to="/options/map_management/room_profiles">Edit profiles</Button>
+            </Box>}
             <Grid2 container spacing={1} direction="row-reverse" flexWrap="wrap-reverse">
                 <Grid2>
                     <ActionButton

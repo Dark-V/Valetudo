@@ -83,6 +83,7 @@ const CAPABILITY_TYPE_TO_ROUTER_MAPPING = {
     [capabilities.AutoEmptyDockManualTriggerCapability.TYPE]: capabilityRouters.AutoEmptyDockManualTriggerCapabilityRouter,
     [capabilities.CleaningHistoryCapability.TYPE]: capabilityRouters.CleaningHistoryCapabilityRouter,
     [capabilities.MaintenanceReminderCapability.TYPE]: capabilityRouters.MaintenanceReminderCapabilityRouter,
+    [capabilities.RoomProfilesCapability.TYPE]: capabilityRouters.RoomProfilesCapabilityRouter,
     [capabilities.TotalStatisticsCapability.TYPE]: capabilityRouters.StatisticsCapabilityRouter,
     [capabilities.CurrentStatisticsCapability.TYPE]: capabilityRouters.StatisticsCapabilityRouter,
     [capabilities.QuirksCapability.TYPE]: capabilityRouters.QuirksCapabilityRouter,

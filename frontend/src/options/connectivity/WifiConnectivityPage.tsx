@@ -1,5 +1,6 @@
 import {
     Box,
+    Alert,
     Button,
     Dialog,
     DialogActions,
@@ -23,8 +24,12 @@ import {
     useWifiConfigurationMutation,
     useWifiConfigurationPropertiesQuery,
     useWifiStatusQuery,
+    Capability,
+    fetchWifiScan,
     WifiStatus
 } from "../../api";
+import {useCapabilitiesSupported} from "../../CapabilitiesProvider";
+import {useQuery} from "@tanstack/react-query";
 
 import {
     Wifi as WifiIcon,
@@ -164,6 +169,8 @@ const WifiStatusComponent: React.FunctionComponent<{
 };
 
 const WifiConnectivity = (): React.ReactElement => {
+    const [scanSupported] = useCapabilitiesSupported(Capability.WifiScan);
+    const networks = useQuery({queryKey: ["wifi_networks_ui"], queryFn: fetchWifiScan, enabled: false, retry: false});
     const {
         data: wifiStatus,
         isPending: wifiStatusPending,
@@ -214,6 +221,26 @@ const WifiConnectivity = (): React.ReactElement => {
             <Typography variant="h6" style={{marginBottom: "0.5rem"}}>
                 Change Wi-Fi configuration
             </Typography>
+            {properties.recoverySupported && <Alert severity="info" sx={{mb: 2}}>
+                2.4 GHz WPA2 only. Use an ASCII network name without quotes, backslashes, dollar/backtick or edge spaces.
+                Applying interrupts this page and restarts only Valetudo. If connection fails within 90 seconds, the previous
+                configuration is restored; if that also fails, AP recovery is attempted at 192.168.5.1.
+                The original passphrase is not saved: the derived WPA2 key is stored locally with root-only permissions.
+                Do not power off during the change. SSH remains limited to its configured LAN/AP ranges.
+                Last transaction: {properties.recovery?.phase}.
+            </Alert>}
+            {scanSupported && <Box sx={{mb: 2}}>
+                <Button loading={networks.isFetching} onClick={() => networks.refetch().catch(() => { /* displayed below */ })}>
+                    Show nearby networks
+                </Button>
+                {networks.isError && <Typography color="error">Could not read nearby networks</Typography>}
+                {networks.data?.map(network => <Button key={network.bssid} size="small" disabled={!network.details.ssid}
+                    onClick={() => {
+                        setNewSSID(network.details.ssid ?? ""); setConfigurationModified(true);
+                    }}>
+                    {network.details.ssid || "Hidden network"} {network.details.signal !== undefined ? `(${network.details.signal} dBm)` : ""}
+                </Button>)}
+            </Box>}
 
             {
                 properties.provisionedReconfigurationSupported &&

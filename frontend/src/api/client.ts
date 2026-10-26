@@ -341,7 +341,8 @@ export const sendCleanSegmentsCommand = async (
             action: "start_segment_action",
             segment_ids: parameters.segment_ids,
             iterations: parameters.iterations ?? 1,
-            customOrder: parameters.customOrder ?? false
+            customOrder: parameters.customOrder ?? false,
+            ...(parameters.useProfiles !== undefined ? {useProfiles: parameters.useProfiles} : {})
         }
     );
 };

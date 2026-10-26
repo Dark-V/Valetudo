@@ -1,0 +1,142 @@
+{
+  "/api/v2/robot/capabilities/RoomProfilesCapability": {
+    "get": {
+      "tags": [
+        "RoomProfilesCapability"
+      ],
+      "responses": {
+        "200": {
+          "description": "Current per-map room profiles"
+        },
+        "500": {
+          "description": "Map stale, changed, or invalid profiles"
+        }
+      }
+    },
+    "put": {
+      "tags": [
+        "RoomProfilesCapability"
+      ],
+      "summary": "Save per-map room profiles without starting cleaning",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mapId",
+                "revision",
+                "rooms"
+              ],
+              "properties": {
+                "mapId": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "rooms": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "profile"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{0,2}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 512
+                      },
+                      "profile": {
+                        "type": "object",
+                        "nullable": true,
+                        "additionalProperties": false,
+                        "required": [
+                          "fan",
+                          "water",
+                          "iterations"
+                        ],
+                        "properties": {
+                          "fan": {
+                            "type": "string",
+                            "enum": [
+                              "low",
+                              "medium",
+                              "high",
+                              "max"
+                            ]
+                          },
+                          "water": {
+                            "type": "string",
+                            "enum": [
+                              "low",
+                              "medium",
+                              "high"
+                            ]
+                          },
+                          "iterations": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 3
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Current per-map room profiles"
+        },
+        "500": {
+          "description": "Map stale, changed, or invalid profiles"
+        }
+      }
+    }
+  },
+  "/api/v2/robot/capabilities/RoomProfilesCapability/properties": {
+    "get": {
+      "tags": [
+        "RoomProfilesCapability"
+      ],
+      "responses": {
+        "200": {
+          "description": "Profile presets and scope"
+        }
+      }
+    }
+  },
+  "/api/v2/robot/capabilities/RoomProfilesCapability/preview": {
+    "get": {
+      "summary": "Read-only preview of current room-cleaning parameters; never sends a start command",
+      "tags": [
+        "RoomProfilesCapability"
+      ],
+      "responses": {
+        "200": {
+          "description": "Native selects payload with sent=false"
+        },
+        "500": {
+          "description": "Map stale or native customized mode overrides selects"
+        }
+      }
+    }
+  }
+}

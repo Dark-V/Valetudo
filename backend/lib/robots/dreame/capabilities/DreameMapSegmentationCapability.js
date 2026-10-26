@@ -45,6 +45,7 @@ class DreameMapSegmentationCapability extends MapSegmentationCapability {
      * @param {object} [options]
      * @param {number} [options.iterations]
      * @param {boolean} [options.customOrder]
+     * @param {boolean} [options.useProfiles]
      * @returns {Promise<void>}
      */
     async executeSegmentAction(segments, options) {
@@ -61,30 +62,29 @@ class DreameMapSegmentationCapability extends MapSegmentationCapability {
         let waterGrade = WaterGradeAttribute?.metaData?.rawValue ?? 1;
 
 
-        const mappedSegments = segments.map((segment, i) => {
-            return [
-                parseInt(segment.id),
-                typeof options?.iterations === "number" ? options.iterations : 1,
-                fanSpeed,
-                waterGrade,
-                this.newOrder ? 1 : i + 1 // on older robots, this determines the order in which the segments should be cleaned
-            ];
+        const mappedSegments = await this.getSegmentSettings(segments, options, {
+            fan: fanSpeed, water: waterGrade, iterations: typeof options?.iterations === "number" ? options.iterations : 1
         });
 
         await this.robot.miotHelper.executeAction(
             this.miot_actions.start.siid,
             this.miot_actions.start.aiid,
-            [
-                {
-                    piid: this.miot_properties.mode.piid,
-                    value: this.segmentCleaningModeId
-                },
-                {
-                    piid: this.miot_properties.additionalCleanupParameters.piid,
-                    value: JSON.stringify({"selects": mappedSegments})
-                }
-            ]
+            [{piid: this.miot_properties.mode.piid, value: this.segmentCleaningModeId},
+                {piid: this.miot_properties.additionalCleanupParameters.piid, value: JSON.stringify({"selects": mappedSegments})}]
         );
+    }
+
+    async getSegmentSettings(segments, options, defaults) {
+        return segments.map((segment, i) => {
+            return [
+                parseInt(segment.id),
+                defaults.iterations,
+                defaults.fan,
+                defaults.water,
+                this.newOrder ? 1 : i + 1 // on older robots, this determines the order in which the segments should be cleaned
+            ];
+        });
+
     }
 
     /**

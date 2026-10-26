@@ -1,6 +1,7 @@
 import {Route} from "react-router";
 import {Navigate, Routes} from "react-router-dom";
 import MapManagement from "./MapManagement";
+import RoomProfiles from "./RoomProfiles";
 import EditMapPage from "../map/EditMapPage";
 import {useCapabilitiesSupported} from "../CapabilitiesProvider";
 import {Capability, useDuststreamingConfigurationQuery} from "../api";
@@ -10,6 +11,7 @@ import SpectatorMapPage from "../map/SpectatorMapPage";
 
 const OptionsRouter = (): React.ReactElement => {
     const [
+        roomProfilesSupported,
         combinedVirtualRestrictionsCapabilitySupported,
 
         mapSegmentEditCapabilitySupported,
@@ -19,6 +21,7 @@ const OptionsRouter = (): React.ReactElement => {
 
         duststreamingSupported,
     ] = useCapabilitiesSupported(
+        Capability.RoomProfiles,
         Capability.CombinedVirtualRestrictions,
 
         Capability.MapSegmentEdit,
@@ -37,6 +40,7 @@ const OptionsRouter = (): React.ReactElement => {
     return (
         <Routes>
             <Route path={""} element={<MapManagement />}/>
+            {roomProfilesSupported && <Route path="room_profiles" element={<RoomProfiles/>}/>}
 
             {
                 (mapSegmentEditCapabilitySupported || mapSegmentRenameCapabilitySupported) &&

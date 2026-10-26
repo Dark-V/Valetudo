@@ -57,6 +57,10 @@
                 "customOrder": {
                   "type": "boolean",
                   "description": "Whether or not Segments should be cleaned in order of ID appearance in the Array. Defaults to false. (Needs firmware support)"
+                },
+                "useProfiles": {
+                  "type": "boolean",
+                  "description": "Use saved per-map room profiles where supported. Defaults to true on D103CN."
                 }
               }
             },
@@ -147,6 +151,9 @@
                     }
                   },
                   "customOrderSupported": {
+                    "type": "boolean"
+                  },
+                  "roomProfilesSupported": {
                     "type": "boolean"
                   }
                 }

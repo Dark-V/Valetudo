@@ -16,6 +16,9 @@ class MapSegmentationCapabilityRouter extends CapabilityRouter {
                 if (Array.isArray(req.body.segment_ids)) {
                     try {
                         const options = {};
+                        if (typeof req.body.useProfiles === "boolean") {
+                            options.useProfiles = req.body.useProfiles;
+                        }
 
                         if (typeof req.body.iterations === "number") {
                             options.iterations = req.body.iterations;
