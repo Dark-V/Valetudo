@@ -1,4 +1,5 @@
 import {
+    Button,
     Grid2,
     LinearProgress,
     linearProgressClasses,
@@ -7,10 +8,13 @@ import {
 } from "@mui/material";
 import React from "react";
 import {
+    Capability,
     RobotAttributeClass,
     useRobotAttributeQuery,
     useRobotStatusQuery,
+    useMaintenanceReminderMutation,
 } from "../api";
+import {useCapabilitiesSupported} from "../CapabilitiesProvider";
 import {RobotMonochromeIcon} from "../components/CustomIcons";
 import ControlsCard from "./ControlsCard";
 import {useValetudoColorsInverse} from "../hooks/useValetudoColors";
@@ -29,6 +33,8 @@ const BatteryProgress = styled(LinearProgress)(({ theme }) => {
 
 const RobotStatus = (): React.ReactElement => {
     const palette = useValetudoColorsInverse();
+    const [maintenanceSupported] = useCapabilitiesSupported(Capability.MaintenanceReminder);
+    const {mutate: acknowledgeMaintenance, isPending: maintenancePending} = useMaintenanceReminderMutation();
     const {
         data: status,
         isPending: isStatusPending,
@@ -121,6 +127,7 @@ const RobotStatus = (): React.ReactElement => {
             icon={RobotMonochromeIcon}
             title="Robot"
             isLoading={isPending}
+            pending={maintenancePending}
         >
             <Grid2 size="grow" container direction="column">
                 <Grid2 container direction="row">
@@ -134,9 +141,16 @@ const RobotStatus = (): React.ReactElement => {
                     </Typography>
                 )}
                 {status?.metaData.maintenanceReminder && (
-                    <Typography variant="body2" color="textSecondary" sx={{mb: 1}}>
-                        Maintenance reminder: {status.metaData.maintenanceReminder}
-                    </Typography>
+                    <Grid2 sx={{mb: 1}}>
+                        <Typography variant="body2" color="textSecondary">
+                            Maintenance reminder: {status.metaData.maintenanceReminder}
+                        </Typography>
+                        {maintenanceSupported && <Button size="small" disabled={maintenancePending}
+                            title="Confirm after cleaning the station tray"
+                            onClick={() => {
+                                acknowledgeMaintenance("mop_tray");
+                            }}>Tray cleaned</Button>}
+                    </Grid2>
                 )}
                 {batteries !== undefined && batteries.length > 0 && (
                     <Grid2 size="grow" container direction="row" width="100%">

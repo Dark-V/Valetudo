@@ -10,6 +10,11 @@ const PAGE_SIZE = 25;
 const MODES: Record<number, string> = {
     2: "Cleaning", 18: "Rooms", 19: "Zones", 23: "Go to"
 };
+const CLEANING_TYPES = {
+    vacuum: "Vacuum only",
+    mop: "Mop only",
+    vacuum_and_mop: "Vacuum + mop"
+};
 
 const HistoryPage = (): React.ReactElement => {
     const [offset, setOffset] = React.useState(0);
@@ -28,12 +33,13 @@ const HistoryPage = (): React.ReactElement => {
             <TableContainer component={Paper}>
                 <Table size="small" aria-label="Cleaning history">
                     <TableHead><TableRow>
-                        <TableCell>Started</TableCell><TableCell>Task</TableCell>
+                        <TableCell>Started</TableCell><TableCell>Task</TableCell><TableCell>Cleaning type</TableCell>
                         <TableCell>Cleaning time</TableCell><TableCell>Area</TableCell><TableCell>Result</TableCell>
                     </TableRow></TableHead>
                     <TableBody>{data.records.map(record => <TableRow key={record.id}>
                         <TableCell>{new Date(record.startedAt).toLocaleString()}</TableCell>
                         <TableCell>{MODES[record.nativeMode] ?? `Mode ${record.nativeMode}`}</TableCell>
+                        <TableCell>{record.cleaningType ? CLEANING_TYPES[record.cleaningType] : "Unknown"}</TableCell>
                         <TableCell>{Math.round(record.duration / 60)} min</TableCell>
                         <TableCell>{(record.area / 10000).toLocaleString()} m²</TableCell>
                         <TableCell>{record.completed === true ? "Completed" : record.completed === false ? "Not completed" : "Unknown"}</TableCell>
@@ -52,6 +58,7 @@ const HistoryPage = (): React.ReactElement => {
             </Box>
             <Typography variant="caption" color="text.secondary">
                 Dates follow the robot’s clock at the time of cleaning. Cleaning time excludes pauses. Historical maps are not included.
+                Sequential vacuum/mop runs may appear as separate records.
             </Typography>
         </>}
     </Box>;

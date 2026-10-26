@@ -38,6 +38,7 @@ import {
     fetchStateAttributes,
     fetchSystemHostInfo,
     fetchThermalHistory,
+    acknowledgeMaintenanceReminder,
     fetchSystemRuntimeInfo,
     fetchTimerInformation,
     fetchTimerProperties,
@@ -481,6 +482,17 @@ export const useBasicControlMutation = () => {
                 updatedAt: Date.now(),
             });
         },
+    });
+};
+
+export const useMaintenanceReminderMutation = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (reminder: "mop_tray") => acknowledgeMaintenanceReminder(reminder).then(fetchStateAttributes),
+        onError: useOnCommandError(Capability.MaintenanceReminder),
+        onSuccess: (data) => {
+            queryClient.setQueryData<RobotAttribute[]>([QueryKey.Attributes], data, {updatedAt: Date.now()});
+        }
     });
 };
 

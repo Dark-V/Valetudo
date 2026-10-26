@@ -22,6 +22,7 @@ export enum Capability {
     KeyLock = "KeyLockCapability",
     Locate = "LocateCapability",
     ManualControl = "ManualControlCapability",
+    MaintenanceReminder = "MaintenanceReminderCapability",
     HighResolutionManualControl = "HighResolutionManualControlCapability",
     MapReset = "MapResetCapability",
     MapSegmentEdit = "MapSegmentEditCapability",
@@ -736,6 +737,7 @@ export interface CleaningHistoryPage {
         area: number;
         completed: boolean | null;
         nativeMode: number;
+        cleaningType: "vacuum" | "mop" | "vacuum_and_mop" | null;
     }[];
     total: number;
     offset: number;

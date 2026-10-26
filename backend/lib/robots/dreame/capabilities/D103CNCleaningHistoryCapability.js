@@ -76,11 +76,27 @@ class D103CNCleaningHistoryCapability extends CleaningHistoryCapability {
                     ![p.CleanTime, p.CleanSize, p.WorkMode].every(n => Number.isFinite(n) && n >= 0)) {
                     throw new Error("Invalid record fields");
                 }
+                // WorkMode selects whole-home/rooms/zones. Actual vacuum/mop
+                // operation is stored per record in ExtendData.mooClean.
+                // Sequential vacuum-then-mop jobs can have separate records.
+                // Missing/bad extended data must not hide an otherwise valid
+                // record or be inferred from today's operation/attachments.
+                let cleaningType = null;
+                try {
+                    if (typeof p.ExtendData === "string" && p.ExtendData.length <= 16384) {
+                        const details = JSON.parse(p.ExtendData);
+                        if (details && !Array.isArray(details) && Number.isInteger(details.mooClean)) {
+                            cleaningType = ({0: "vacuum_and_mop", 1: "mop", 2: "vacuum"})[details.mooClean] ?? null;
+                        }
+                    }
+                } catch (e) {
+                    // Only the cleaning type is unknown, not the entire row.
+                }
                 records.push({
                     id: String(row.id), startedAt: row.startTime * 1000,
                     duration: p.CleanTime * 60, area: p.CleanSize * 10000,
                     completed: p.CleanComplete === 1 ? true : p.CleanComplete === 0 ? false : null,
-                    nativeMode: p.WorkMode
+                    nativeMode: p.WorkMode, cleaningType: cleaningType
                 });
             } catch (e) {
                 skippedRecords++;

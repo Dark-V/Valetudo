@@ -140,7 +140,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             (args.siid === 3 && args.aiid === 1) || (args.siid === 4 && args.aiid === 1)) ? this.camera.stop() : Promise.resolve();
         const isManual = method === "set_properties" && Array.isArray(args) &&
             args.length === 1 && args[0].siid === 4 && args[0].piid === 15;
-        const stationAction = method === "action" && ((args.siid === 4 && args.aiid === 4) || (args.siid === 15 && args.aiid === 1));
+        const stationAction = method === "action" && ((args.siid === 4 && [3, 4].includes(args.aiid)) || (args.siid === 15 && args.aiid === 1));
         const pointAction = method === "action" && args.siid === 4 && args.aiid === 1 && args.in.some(p => p.piid === 1 && p.value === 23);
         if (stationAction || pointAction || (this.stationActionPending && method === "action" && args.siid === 4 && args.aiid === 2)) {
             // A station/nav action with a lost ACK must not be blindly replayed.
@@ -242,7 +242,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     /** Bounded, read-only preflight; never joins a potentially retrying UI poll. */
     async refreshDockState() {
-        const pairs = [[2, 1], [2, 2], [3, 1], [3, 2], [4, 25], [15, 5], [4, 53], [4, 6], [27, 1], [27, 2], [27, 3]];
+        const pairs = [[2, 1], [2, 2], [3, 1], [3, 2], [4, 25], [15, 5], [4, 53], [4, 6], [27, 1], [27, 2], [27, 3], [4, 7]];
         const properties = [];
         for (let i = 0; i < pairs.length; i += 8) {
             const batch = pairs.slice(i, i + 8);
