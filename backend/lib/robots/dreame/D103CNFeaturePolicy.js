@@ -116,6 +116,9 @@ function actionAllowed(args) {
     if (args.siid === 4 && args.aiid === 4) {
         return args.in.length === 1 && args.in[0].piid === 10 && ["2,1", "1,0", "3,1", "3,0"].includes(args.in[0].value);
     }
+    if (args.siid === 4 && args.aiid === 3) {
+        return args.in.length === 1 && args.in[0].piid === 10 && args.in[0].value === "[114]";
+    }
     if (args.siid === 15 && args.aiid === 1 && args.in.length === 0) {
         return true;
     }

@@ -1,0 +1,80 @@
+{
+  "/api/v2/robot/capabilities/MaintenanceReminderCapability": {
+    "put": {
+      "tags": [
+        "MaintenanceReminderCapability"
+      ],
+      "summary": "Confirm physical maintenance and acknowledge only the specified native reminder",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "reminder"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "acknowledge"
+                  ]
+                },
+                "reminder": {
+                  "type": "string",
+                  "enum": [
+                    "mop_tray"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Native reminder cleared or already absent"
+        },
+        "400": {
+          "description": "Unsupported reminder"
+        },
+        "500": {
+          "description": "Preflight, native acknowledgement or readback failed"
+        }
+      }
+    }
+  },
+  "/api/v2/robot/capabilities/MaintenanceReminderCapability/properties": {
+    "get": {
+      "tags": [
+        "MaintenanceReminderCapability"
+      ],
+      "responses": {
+        "200": {
+          "description": "Supported reminder identifiers",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "supportedReminders": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "mop_tray"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

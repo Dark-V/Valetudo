@@ -547,6 +547,12 @@ export const fetchThermalHistory = async (): Promise<ThermalHistory> => {
     return (await valetudoAPI.get<ThermalHistory>("/system/host/thermal", {timeout: 5000})).data;
 };
 
+export const acknowledgeMaintenanceReminder = async (reminder: "mop_tray"): Promise<void> => {
+    await valetudoAPI.put(`/robot/capabilities/${Capability.MaintenanceReminder}`, {
+        action: "acknowledge", reminder: reminder
+    }, {timeout: 15000});
+};
+
 export const fetchSystemRuntimeInfo = async (): Promise<SystemRuntimeInfo> => {
     return valetudoAPI
         .get<SystemRuntimeInfo>("/system/runtime/info")

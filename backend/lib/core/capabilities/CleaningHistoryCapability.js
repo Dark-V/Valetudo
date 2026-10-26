@@ -9,6 +9,7 @@ const NotImplementedError = require("../NotImplementedError");
  * @property {number} area Square centimetres
  * @property {boolean|null} completed Null when the firmware does not report it
  * @property {number} nativeMode
+ * @property {"vacuum"|"mop"|"vacuum_and_mop"|null} cleaningType Actual historical operation; null when absent/unknown
  *
  * @typedef {object} CleaningHistoryPage
  * @property {CleaningRecord[]} records

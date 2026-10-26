@@ -53,7 +53,8 @@
                         "duration",
                         "area",
                         "completed",
-                        "nativeMode"
+                        "nativeMode",
+                        "cleaningType"
                       ],
                       "properties": {
                         "id": {
@@ -74,6 +75,17 @@
                         },
                         "nativeMode": {
                           "type": "number"
+                        },
+                        "cleaningType": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "vacuum",
+                            "mop",
+                            "vacuum_and_mop",
+                            null
+                          ],
+                          "description": "Actual operation stored in the historical record; null when unavailable. Sequential vacuum/mop phases may have separate records."
                         }
                       }
                     }
