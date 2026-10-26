@@ -128,7 +128,8 @@ const SegmentActions = (
 
     return (
         <>
-            {mapSegmentationProperties.roomProfilesSupported && <Box>
+            {/* The map overlay ignores pointer events; this interactive row must opt back in. */}
+            {mapSegmentationProperties.roomProfilesSupported && <Box sx={{pointerEvents: "auto", width: "fit-content"}}>
                 <FormControlLabel label="Use room profiles" control={<Checkbox checked={useProfiles}
                     onChange={(_, checked) => setUseProfiles(checked)}/>}/>
                 <Button component={Link} to="/options/map_management/room_profiles">Edit profiles</Button>
