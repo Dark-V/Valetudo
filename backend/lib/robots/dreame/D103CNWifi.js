@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
+const os = require("os");
 const {execFile, spawn} = require("child_process");
 const {promisify} = require("util");
 
@@ -18,7 +19,18 @@ async function run(file, args) {
 
 async function status() {
     const fields = {};
-    const raw = await run("/usr/bin/wpa_cli", ["-i", "wlan0", "status"]);
+    const ips = (os.networkInterfaces().wlan0 ?? []).filter(address => address.family === "IPv4").map(address => address.address);
+    let raw;
+    try {
+        raw = await run("/usr/bin/wpa_cli", ["-i", "wlan0", "status"]);
+    } catch (e) {
+        // In provisioning AP mode there may be no supplicant socket. Still
+        // expose the configuration form rather than rendering a blocking error.
+        if (ips.includes("192.168.5.1")) {
+            return {state: "not_connected", details: {ips: ips}};
+        }
+        throw e;
+    }
     for (const line of raw.split("\n")) {
         const i = line.indexOf("=");
         if (i > 0) {
@@ -30,10 +42,10 @@ async function status() {
         details.ssid = fields.ssid;
         details.bssid = fields.bssid;
         details.frequency = "2.4ghz";
-        details.ips = fields.ip_address ? [fields.ip_address] : [];
+        details.ips = ips.length ? ips : fields.ip_address ? [fields.ip_address] : [];
         return {state: "connected", details: details};
     }
-    return {state: "not_connected", details: details};
+    return {state: "not_connected", details: {...details, ips: ips}};
 }
 
 function transactionState() {

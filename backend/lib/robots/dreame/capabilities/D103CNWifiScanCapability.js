@@ -6,7 +6,15 @@ class D103CNWifiScanCapability extends WifiScanCapability {
     async scan() {
         // Read the supplicant's scan cache. A page visit must not interrupt the
         // live link by forcing the vendor driver into a new radio scan.
-        const raw = await Wifi.run("/usr/bin/wpa_cli", ["-i", "wlan0", "scan_results"]);
+        let raw;
+        try {
+            raw = await Wifi.run("/usr/bin/wpa_cli", ["-i", "wlan0", "scan_results"]);
+        } catch (e) {
+            if ((await Wifi.status()).details.ips?.includes("192.168.5.1")) {
+                return [];
+            }
+            throw e;
+        }
         return raw.split("\n").flatMap(line => {
             const fields = line.split("\t");
             if (fields.length < 5 || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(fields[0])) {
