@@ -97,6 +97,7 @@ const RobotStatus = (): React.ReactElement => {
                             }}
                         >
                             Battery{batteries.length > 1 ? ` ${index + 1}` : ""}: {Math.round(battery.level)}%
+                            {battery.flag === "charging" ? " · Charging" : battery.flag === "charged" ? " · Fully charged" : ""}
                         </Typography>
                     </Grid2>
                     <Grid2 sx={{ flexGrow: 1, minHeight: "1rem" }}>
@@ -130,6 +131,11 @@ const RobotStatus = (): React.ReactElement => {
                 {dock && !["idle", "error"].includes(dock.value) && (
                     <Typography variant="body2" color="textSecondary" sx={{mb: 1}}>
                         {describeDockState(dock)}
+                    </Typography>
+                )}
+                {status?.metaData.maintenanceReminder && (
+                    <Typography variant="body2" color="textSecondary" sx={{mb: 1}}>
+                        Maintenance reminder: {status.metaData.maintenanceReminder}
                     </Typography>
                 )}
                 {batteries !== undefined && batteries.length > 0 && (

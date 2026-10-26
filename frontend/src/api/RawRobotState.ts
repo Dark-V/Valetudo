@@ -21,7 +21,13 @@ export enum RobotAttributeClass {
 
 export interface StatusState {
     __class: RobotAttributeClass.StatusState;
-    metaData: Record<string, never>;
+    metaData: {
+        miotStatus?: number;
+        nativeFault?: number;
+        maintenanceReminder?: string;
+        taskStatus?: number;
+        autoResumeEnabled?: boolean;
+    };
     value:
         | "error"
         | "docked"

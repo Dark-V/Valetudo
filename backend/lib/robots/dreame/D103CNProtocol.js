@@ -6,7 +6,7 @@ const zlib = require("zlib");
 const READ_PROPERTIES = Object.freeze([
     [2, 1], [2, 2], [2, 3], [2, 5], [3, 1], [3, 2], [4, 25], [15, 5],
     [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 64], [7, 1], [4, 53],
-    [4, 6], [27, 1], [27, 2], [27, 3]
+    [4, 6], [27, 1], [27, 2], [27, 3], [4, 7], [4, 11]
 ]);
 // Stock packed clean-setting 4/23: low byte selects operation mode;
 // upper bytes contain mop washing/wetness settings and must be preserved.
@@ -31,6 +31,13 @@ function withOperationMode(value, preset) {
 // do not suppress it during navigation/cleaning or discard other faults.
 function isDockMopReminder(status, fault, charging) {
     return fault === 68 && charging === 1 && [6, 8, 9, 13, 20, 21, 22, 30].includes(status);
+}
+
+function isDockTrayReminder(status, fault, charging) {
+    // Upstream DreameGen2 treats 114 as "Please remember to clean the mop
+    // tray", not a failure. Keep the native code and require dock/charging
+    // context; do not silently suppress an unexpected active-operation fault.
+    return fault === 114 && charging === 1 && [6, 8, 9, 13, 20, 21, 22, 30].includes(status);
 }
 const BASIC_ACTIONS = Object.freeze([[2, 1], [2, 2], [4, 2], [3, 1]]);
 // Public MIOT action IDs; intentionally NOT advertised as working dock capabilities yet.
@@ -176,15 +183,20 @@ function summarizeState(properties) {
     const level = values.get("3/1");
     const charging = values.get("3/2");
     const mopReminder = isDockMopReminder(status, fault, charging);
-    const activeFault = fault > 0 && !mopReminder ? fault : undefined;
+    const trayReminder = isDockTrayReminder(status, fault, charging);
+    const activeFault = fault > 0 && !mopReminder && !trayReminder ? fault : undefined;
     const pointNavigation = values.get("4/1") === 23 && [1, 7, 12, 23].includes(status);
+    const resumable = values.get("4/7") > 0 && ["docked", "returning", "paused", "idle"].includes(stateMap[status]);
     return {
         status: status === undefined ? undefined : {
             value: activeFault ? "error" : pointNavigation ? "moving" : stateMap[status] ?? "error",
-            flag: pointNavigation ? "target" : status === 11 ? "mapping" : "none",
+            flag: pointNavigation ? "target" : status === 11 ? "mapping" : resumable ? "resumable" : "none",
             metaData: {miotStatus: status, workMode: values.get("4/1"),
                 unmapped: stateMap[status] === undefined, upgrading: status === 14,
-                nativeFault: fault, mopAttachmentReminder: mopReminder},
+                nativeFault: fault, mopAttachmentReminder: mopReminder,
+                ...(trayReminder ? {maintenanceReminder: "Clean the mop dock tray"} : {}),
+                taskStatus: values.get("4/7"),
+                autoResumeEnabled: [0, 1].includes(values.get("4/11")) ? values.get("4/11") === 1 : undefined},
             fault: activeFault
         },
         battery: level >= 0 && level <= 100 ? {
@@ -201,7 +213,8 @@ function summarizeState(properties) {
         // No speculative conversion of clean_area to cm²: retain its raw value for diagnostics.
         diagnostics: {cleanTimeMinutes: values.get("4/2"), cleanAreaRaw: values.get("4/3"),
             washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23"),
-            faultRaw: fault, dockMopReminder: mopReminder}
+            faultRaw: fault, dockMopReminder: mopReminder, dockTrayReminder: trayReminder,
+            taskStatusRaw: values.get("4/7"), autoResumeRaw: values.get("4/11")}
     };
 }
 
@@ -248,6 +261,7 @@ module.exports = {READ_PROPERTIES: READ_PROPERTIES, BASIC_ACTIONS: BASIC_ACTIONS
     OPERATION_MODES: OPERATION_MODES, validCleanSettings: validCleanSettings,
     operationMode: operationMode, withOperationMode: withOperationMode,
     isDockMopReminder: isDockMopReminder,
+    isDockTrayReminder: isDockTrayReminder,
     MANUAL_LIMITS: MANUAL_LIMITS, manualPayload: manualPayload, validManualPayload: validManualPayload,
     normalizeSecret: normalizeSecret, parseDeviceId: parseDeviceId,
     matchesModel: matchesModel, commandAllowed: commandAllowed, summarizeState: summarizeState, decodeMapEnvelope: decodeMapEnvelope};

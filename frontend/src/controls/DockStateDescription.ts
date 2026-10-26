@@ -10,6 +10,6 @@ export const describeDockState = (dock: DockStatusState): string => {
         error: "Dock fault",
     }[dock.value];
     const remaining = dock.metaData.dryingRemainingMinutes;
-    return dock.value === "drying" && typeof remaining === "number" && Number.isInteger(remaining) && remaining >= 0 ?
+    return dock.value === "drying" && typeof remaining === "number" && Number.isInteger(remaining) && remaining > 0 ?
         `${label} — ${remaining} min remaining` : label;
 };
