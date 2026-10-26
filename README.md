@@ -17,7 +17,7 @@ Experimental local-control port, tested on **factory firmware 4.5.6_1409**, Athe
 - [D103CN rooting tools](https://github.com/Dark-V/D103CN_root)
 - [Port documentation, build instructions and runtime setup](d103cn/README.md)
 - [Change history](docs/d103cn/history/)
-- [??????? ??????](README.ru.md)
+- [Русская версия](README.ru.md)
 
 This port runs alongside the factory firmware. Feature availability and verification depend on the exact model and firmware; check the port documentation before installing.
 
