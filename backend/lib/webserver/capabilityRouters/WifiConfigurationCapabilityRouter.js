@@ -2,6 +2,12 @@ const CapabilityRouter = require("./CapabilityRouter");
 const ValetudoWifiConfiguration = require("../../entities/core/ValetudoWifiConfiguration");
 
 class WifiConfigurationCapabilityRouter extends CapabilityRouter {
+    sendErrorResponse(req, res, err) {
+        // Never pass Wi-Fi credentials to the generic router logger, including
+        // on validation/native-tool failures.
+        super.sendErrorResponse({...req, body: "[Wi-Fi credentials redacted]"}, res,
+            new Error("Wi-Fi configuration/status request failed: " + err.message));
+    }
     initRoutes() {
         this.router.get("/", async (req, res) => {
             try {

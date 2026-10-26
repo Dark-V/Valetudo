@@ -3,9 +3,13 @@ const D103CNAutoEmptyDockManualTriggerCapability = require("./capabilities/D103C
 const D103CNCleaningHistoryCapability = require("./capabilities/D103CNCleaningHistoryCapability");
 const D103CNGoToLocationCapability = require("./capabilities/D103CNGoToLocationCapability");
 const D103CNMaintenanceReminderCapability = require("./capabilities/D103CNMaintenanceReminderCapability");
+const D103CNMapSegmentationCapability = require("./capabilities/D103CNMapSegmentationCapability");
 const D103CNMopDockCleanManualTriggerCapability = require("./capabilities/D103CNMopDockCleanManualTriggerCapability");
 const D103CNMopDockDryManualTriggerCapability = require("./capabilities/D103CNMopDockDryManualTriggerCapability");
+const D103CNRoomProfilesCapability = require("./capabilities/D103CNRoomProfilesCapability");
 const D103CNSpotCleaningCapability = require("./capabilities/D103CNSpotCleaningCapability");
+const D103CNWifiConfigurationCapability = require("./capabilities/D103CNWifiConfigurationCapability");
+const D103CNWifiScanCapability = require("./capabilities/D103CNWifiScanCapability");
 const ValetudoMapAnnotation = require("../../entities/core/ValetudoMapAnnotation");
 const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZone");
 
@@ -17,6 +21,9 @@ const ValetudoRestrictedZone = require("../../entities/core/ValetudoRestrictedZo
 function registerFeatures(robot) {
     robot.registerCapability(new D103CNCleaningHistoryCapability({robot: robot}));
     robot.registerCapability(new D103CNMaintenanceReminderCapability({robot: robot}));
+    robot.registerCapability(new D103CNRoomProfilesCapability({robot: robot}));
+    robot.registerCapability(new D103CNWifiConfigurationCapability({robot: robot}));
+    robot.registerCapability(new D103CNWifiScanCapability({robot: robot}));
     robot.registerCapability(new D103CNSpotCleaningCapability({robot: robot}));
     robot.registerCapability(new D103CNGoToLocationCapability({robot: robot}));
     robot.registerCapability(new D103CNMopDockCleanManualTriggerCapability({robot: robot}));
@@ -28,7 +35,7 @@ function registerFeatures(robot) {
         miot_actions: {start: {siid: 4, aiid: 1}},
         miot_properties: {mode: {piid: 1}, additionalCleanupParameters: {piid: 10}}
     };
-    robot.registerCapability(new capabilities.DreameMapSegmentationCapability({
+    robot.registerCapability(new D103CNMapSegmentationCapability({
         ...task, segmentCleaningModeId: 18, iterationsSupported: 4, customOrderSupported: true, newOrder: true
     }));
     robot.registerCapability(new capabilities.DreameZoneCleaningCapability({

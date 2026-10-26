@@ -162,6 +162,7 @@ const ValetudoMapDataExportButtonItem = (): React.ReactElement => {
 
 const MapManagement = (): React.ReactElement => {
     const [
+        roomProfilesSupported,
         persistentMapControlCapabilitySupported,
         mappingPassCapabilitySupported,
         mapResetCapabilitySupported,
@@ -174,6 +175,7 @@ const MapManagement = (): React.ReactElement => {
 
         duststreamingCapabilitySupported
     ] = useCapabilitiesSupported(
+        Capability.RoomProfiles,
         Capability.PersistentMapControl,
         Capability.MappingPass,
         Capability.MapReset,
@@ -194,6 +196,11 @@ const MapManagement = (): React.ReactElement => {
 
     const robotManagedListItems = React.useMemo(() => {
         const items = [];
+
+        if (roomProfilesSupported) {
+            items.push(<LinkListMenuItem key="roomProfiles" url="/options/map_management/room_profiles"
+                primaryLabel="Room profiles" secondaryLabel="Per-room fan, water and passes" icon={<SegmentEditIcon/>}/>);
+        }
 
         if (
             persistentMapControlCapabilitySupported ||
@@ -265,6 +272,7 @@ const MapManagement = (): React.ReactElement => {
 
         return items;
     }, [
+        roomProfilesSupported,
         persistentMapControlCapabilitySupported,
         mappingPassCapabilitySupported,
         mapResetCapabilitySupported,

@@ -21,6 +21,7 @@ class MapSegmentationCapability extends Capability {
      * @param {object} [options]
      * @param {number} [options.iterations]
      * @param {boolean} [options.customOrder]
+     * @param {boolean} [options.useProfiles]
      * @returns {Promise<void>}
      */
     async executeSegmentAction(segments, options) {
