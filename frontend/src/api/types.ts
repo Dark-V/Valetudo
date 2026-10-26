@@ -153,6 +153,28 @@ export interface SystemHostInfo {
     }>
 }
 
+export interface ThermalHistory {
+    sampledAt: number | null;
+    sampleIntervalSeconds: number;
+    retentionSeconds: number;
+    collectedSeconds: number;
+    storage: string;
+    sensors: {
+        id: string;
+        type: string;
+        current: number | null;
+        windows: {
+            seconds: number;
+            samples: number;
+            average: number | null;
+            min: number | null;
+            max: number | null;
+            coverageSeconds: number;
+            complete: boolean;
+        }[];
+    }[];
+}
+
 export interface SystemRuntimeInfo {
     uptime: number;
     argv: Array<string>;

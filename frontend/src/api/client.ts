@@ -63,6 +63,7 @@ import {
     SpotActionRequestParameters,
     StatisticsProperties,
     SystemHostInfo,
+    ThermalHistory,
     SystemRuntimeInfo,
     Timer,
     TimerInformation,
@@ -540,6 +541,10 @@ export const fetchSystemHostInfo = async (): Promise<SystemHostInfo> => {
         .then(({data}) => {
             return data;
         });
+};
+
+export const fetchThermalHistory = async (): Promise<ThermalHistory> => {
+    return (await valetudoAPI.get<ThermalHistory>("/system/host/thermal", {timeout: 5000})).data;
 };
 
 export const fetchSystemRuntimeInfo = async (): Promise<SystemRuntimeInfo> => {

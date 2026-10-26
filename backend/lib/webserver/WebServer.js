@@ -144,7 +144,8 @@ class WebServer {
 
         this.app.use("/api/v2/timers/", new TimerRouter({config: this.config, robot: this.robot, validator: this.validator, scheduler: options.scheduler}).getRouter());
 
-        this.app.use("/api/v2/system/", new SystemRouter({phoenixManager: this.phoenixManager}).getRouter());
+        this.systemRouter = new SystemRouter({phoenixManager: this.phoenixManager});
+        this.app.use("/api/v2/system/", this.systemRouter.getRouter());
 
         this.app.use("/api/v2/events/", new ValetudoEventRouter({valetudoEventStore: this.valetudoEventStore, validator: this.validator}).getRouter());
 
@@ -229,6 +230,7 @@ class WebServer {
             Logger.debug("Webserver shutdown in progress...");
             this.robotRouter.shutdown();
             this.valetudoRouter.shutdown();
+            this.systemRouter.shutdown();
 
             //closing the server
             this.webserver.close(() => {

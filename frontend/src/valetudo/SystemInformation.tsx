@@ -37,6 +37,7 @@ import ReloadableCard from "../components/ReloadableCard";
 import PaperContainer from "../components/PaperContainer";
 import TextInformationGrid from "../components/TextInformationGrid";
 import {useValetudoColorsInverse} from "../hooks/useValetudoColors";
+import ThermalInformation from "./ThermalInformation";
 
 const SystemRuntimeInfo = (): React.ReactElement => {
     const {
@@ -485,6 +486,9 @@ const SystemInformation = (): React.ReactElement => {
                     style={{flexGrow: 1}}
                 >
                     <SystemRuntimeInfo/>
+                </Grid2>
+                <Grid2 size={{xs: 12}}>
+                    <ThermalInformation/>
                 </Grid2>
             </Grid2>
         </PaperContainer>

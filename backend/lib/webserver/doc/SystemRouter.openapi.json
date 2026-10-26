@@ -157,5 +157,93 @@
         }
       }
     }
+  },
+  "/api/v2/system/host/thermal": {
+    "get": {
+      "tags": [
+        "System"
+      ],
+      "summary": "Read current temperatures and rolling 1m/1h/24h averages kept in RAM",
+      "responses": {
+        "200": {
+          "description": "Actual readings; partial windows and missing samples are explicit",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sampledAt": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "sampleIntervalSeconds": {
+                    "type": "integer"
+                  },
+                  "retentionSeconds": {
+                    "type": "integer"
+                  },
+                  "collectedSeconds": {
+                    "type": "integer"
+                  },
+                  "storage": {
+                    "type": "string"
+                  },
+                  "sensors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "current": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "windows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "seconds": {
+                                "type": "integer"
+                              },
+                              "samples": {
+                                "type": "integer"
+                              },
+                              "average": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "min": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "max": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "coverageSeconds": {
+                                "type": "integer"
+                              },
+                              "complete": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
