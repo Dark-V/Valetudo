@@ -313,7 +313,8 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         const fault = this.d103State.find(p => p.siid === 2 && p.piid === 2)?.value;
         const charging = this.d103State.find(p => p.siid === 3 && p.piid === 2)?.value;
         const dockMopReminder = D103.isDockMopReminder(status, fault, charging);
-        const effectiveFault = dockMopReminder ? 0 : fault;
+        const dockTrayReminder = D103.isDockTrayReminder(status, fault, charging);
+        const effectiveFault = dockMopReminder || dockTrayReminder ? 0 : fault;
         const age = performance.now() - Math.min(this.lastStateAt, this.lastFaultAt);
         const dock = this.state.getFirstMatchingAttribute({attributeClass: "DockStatusStateAttribute"})?.value;
         const stationBusy = ["drying", "cleaning", "emptying"].includes(dock);
@@ -327,6 +328,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                         "Manual driving requires an idle, paused or docked robot";
         return {status: status ?? null, fault: fault ?? null, effectiveFault: effectiveFault ?? null,
             dockMopReminder: dockMopReminder,
+            dockTrayReminder: dockTrayReminder,
             ageMs: Number.isFinite(age) ? Math.round(age) : null,
             ready: ready, reason: reason,
             cameraReady: effectiveFault === 0 && [2, 3, 6, 8, 13, 21, 23].includes(status) && age <= 10000,
@@ -392,7 +394,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             const progress = parsed.station.dryingProgressPercent;
             this.state.upsertFirstMatchingAttribute(new attrs.DockStatusStateAttribute({value: value, metaData: {
                 mopDockStatus: parsed.station.mopDockStatus, autoEmptyState: parsed.station.autoEmptyState,
-                ...(value === "drying" && Number.isInteger(remaining) && remaining >= 0 && remaining <= 1440 ?
+                ...(value === "drying" && Number.isInteger(remaining) && remaining > 0 && remaining <= 1440 ?
                     {dryingRemainingMinutes: remaining} : {}),
                 ...(value === "drying" && Number.isInteger(progress) && progress >= 0 && progress <= 100 ?
                     {dryingProgressPercent: progress} : {})
