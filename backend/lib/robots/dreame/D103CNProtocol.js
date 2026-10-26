@@ -5,7 +5,8 @@ const zlib = require("zlib");
 
 const READ_PROPERTIES = Object.freeze([
     [2, 1], [2, 2], [2, 3], [2, 5], [3, 1], [3, 2], [4, 25], [15, 5],
-    [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 64], [7, 1]
+    [4, 1], [4, 2], [4, 3], [4, 5], [4, 23], [4, 64], [7, 1], [4, 53],
+    [4, 6], [27, 1], [27, 2], [27, 3]
 ]);
 // Stock packed clean-setting 4/23: low byte selects operation mode;
 // upper bytes contain mop washing/wetness settings and must be preserved.
@@ -176,10 +177,11 @@ function summarizeState(properties) {
     const charging = values.get("3/2");
     const mopReminder = isDockMopReminder(status, fault, charging);
     const activeFault = fault > 0 && !mopReminder ? fault : undefined;
+    const pointNavigation = values.get("4/1") === 23 && [1, 7, 12, 23].includes(status);
     return {
         status: status === undefined ? undefined : {
-            value: activeFault ? "error" : stateMap[status] ?? "error",
-            flag: status === 11 ? "mapping" : "none",
+            value: activeFault ? "error" : pointNavigation ? "moving" : stateMap[status] ?? "error",
+            flag: pointNavigation ? "target" : status === 11 ? "mapping" : "none",
             metaData: {miotStatus: status, workMode: values.get("4/1"),
                 unmapped: stateMap[status] === undefined, upgrading: status === 14,
                 nativeFault: fault, mopAttachmentReminder: mopReminder},
@@ -194,6 +196,8 @@ function summarizeState(properties) {
             ({8: "drying", 9: "cleaning", 20: "cleaning", 21: "pause", 22: "emptying", 30: "cleaning"})[status] ?? "idle",
         station: {mopDockStatus: values.get("4/25"), autoEmptyState: values.get("15/5"),
             dryingRemainingMinutes: values.get("2/5"), dryingProgressPercent: values.get("4/64")},
+        attachments: {mop: values.get("4/53"), watertank: values.get("4/6")},
+        dockComponents: {water_tank_clean: values.get("27/1"), water_tank_dirty: values.get("27/2"), dustbag: values.get("27/3")},
         // No speculative conversion of clean_area to cm²: retain its raw value for diagnostics.
         diagnostics: {cleanTimeMinutes: values.get("4/2"), cleanAreaRaw: values.get("4/3"),
             washStationRaw: values.get("4/25"), workModeRaw: values.get("4/1"), cleanSettingsRaw: values.get("4/23"),

@@ -33,6 +33,11 @@ function validTask(inputs) {
     }
     const mode = inputs[0].value;
     const payload = jsonObject(inputs[1].value);
+    if (mode === 23 && keysAre(payload, ["tpoint"])) {
+        return Array.isArray(payload.tpoint) && payload.tpoint.length === 1 &&
+            payload.tpoint.every(row => Array.isArray(row) && row.length === 4 &&
+                row.slice(0, 2).every(n => Number.isInteger(n) && coordinate(n)) && row[2] === 0 && row[3] === 0);
+    }
     if (mode === 20 && keysAre(payload, ["points"])) {
         const rows = payload.points;
         return Array.isArray(rows) && rows.length === 1 && rows.every(row =>
@@ -107,6 +112,12 @@ function actionAllowed(args) {
     }
     if (args.siid === 6 && args.aiid === 2) {
         return validMapEdit(args.in);
+    }
+    if (args.siid === 4 && args.aiid === 4) {
+        return args.in.length === 1 && args.in[0].piid === 10 && ["2,1", "1,0", "3,1", "3,0"].includes(args.in[0].value);
+    }
+    if (args.siid === 15 && args.aiid === 1 && args.in.length === 0) {
+        return true;
     }
     return args.in.length === 0 && args.aiid === 1 && [7, 9, 10, 11, 18].includes(args.siid);
 }
