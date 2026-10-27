@@ -359,7 +359,14 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                     severity: {kind: ValetudoRobotError.SEVERITY_KIND.UNKNOWN, level: ValetudoRobotError.SEVERITY_LEVEL.ERROR},
                     subsystem: ValetudoRobotError.SUBSYSTEM.UNKNOWN,
                     vendorErrorCode: String(parsed.status.fault ?? "unknown"),
-                    message: parsed.status.fault ? `D103CN fault ${parsed.status.fault}` : "D103CN unknown/error state; check robot"
+                    message: parsed.status.fault ? (() => {
+                        // Dreame family descriptions are indicative; the D103CN
+                        // MIOT specification does not define the fault values.
+                        const descriptions = require("./D103CNErrorDescriptions.json");
+                        const description = descriptions[String(parsed.status.fault)];
+                        return description ? `${description} (Dreame code ${parsed.status.fault})` :
+                            `Unknown D103CN fault ${parsed.status.fault}; check the robot`;
+                    })() : "D103CN unknown/error state; check robot"
                 }) : undefined
             }));
         }
