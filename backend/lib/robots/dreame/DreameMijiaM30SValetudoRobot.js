@@ -428,6 +428,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         // Intentionally do not call MiioValetudoRobot.startup(): it prints DID and both secrets.
         Logger.info("Experimental Xiaomi Mijia M30S / D103CN profile; secrets redacted");
         Logger.info(`D103CN controls=${this.implConfig.allowControls === true}, mapPolling=${this.implConfig.enableMapPolling === true}`);
+        this.capabilities.GoToLocationCapability?.startRecovery();
         if (this.implConfig.enableMapPolling === true) {
             this.pollMap();
         }
@@ -561,6 +562,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     }
 
     async shutdown() {
+        clearInterval(this.capabilities.GoToLocationCapability?.timer);
         clearTimeout(this.mapBootstrapTimer);
         clearTimeout(this.mapFullFrameTimer);
         clearTimeout(this.mapPollTimeout);
