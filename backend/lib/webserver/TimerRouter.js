@@ -88,7 +88,7 @@ class TimerRouter {
                 if (!action) {
                     res.sendStatus(400);
                 } else {
-                    const storedTimers = this.config.get("timers");
+                    const storedTimers = {...this.config.get("timers")};
                     const newTimer = new ValetudoTimer({
                         label: req.body.label,
                         enabled: req.body.enabled === true,
@@ -111,7 +111,7 @@ class TimerRouter {
         });
 
         this.router.put("/:id", this.validator, (req, res) => {
-            const storedTimers = this.config.get("timers");
+            const storedTimers = {...this.config.get("timers")};
 
             if (storedTimers[req.params.id]) {
                 if (
@@ -172,7 +172,7 @@ class TimerRouter {
         });
 
         this.router.delete("/:id", (req, res) => {
-            const timers = this.config.get("timers");
+            const timers = {...this.config.get("timers")};
 
             if (timers[req.params.id]) {
                 delete(timers[req.params.id]);
