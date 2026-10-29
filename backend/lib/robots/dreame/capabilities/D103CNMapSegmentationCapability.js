@@ -2,6 +2,9 @@ const DreameMapSegmentationCapability = require("./DreameMapSegmentationCapabili
 
 class D103CNMapSegmentationCapability extends DreameMapSegmentationCapability {
     async getSegmentSettings(segments, options, defaults) {
+        if (options?.useProfiles === false) {
+            return super.getSegmentSettings(segments, options, defaults);
+        }
         const profiles = /** @type {import("./D103CNRoomProfilesCapability")} */ (
             this.robot.capabilities.RoomProfilesCapability);
         const current = await profiles.getProfiles();
@@ -9,7 +12,7 @@ class D103CNMapSegmentationCapability extends DreameMapSegmentationCapability {
         if (segments.some(room => !known.has(room.id))) {
             throw new Error("A selected room no longer exists. Refresh the map");
         }
-        if (options?.useProfiles === false || !segments.some(room => known.get(room.id))) {
+        if (!segments.some(room => known.get(room.id))) {
             return super.getSegmentSettings(segments, options, defaults);
         }
         // Native customized cleaning can override selects. Never silently
