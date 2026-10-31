@@ -3,6 +3,7 @@ const DreameAICameraGoToLocationCapability = require("./DreameAICameraGoToLocati
 const DreameMapParser = require("../DreameMapParser");
 const fs = require("fs");
 const Logger = require("../../../Logger");
+const {performance} = require("perf_hooks");
 
 const JOURNAL = "/data/.valetudo/goto-restore.json";
 const WAIT = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -65,10 +66,8 @@ class D103CNGoToLocationCapability extends DreameAICameraGoToLocationCapability 
                 if (originalFan !== 0) {
                     await this.robot.miotHelper.writeProperty(2, 3, 0);
                 }
-                if ((await this.robot.miotHelper.readProperty(4, 23)) % 256 !== 2 ||
-                    await this.robot.miotHelper.readProperty(2, 3) !== 0) {
-                    throw new Error("Robot did not confirm vacuum mode and minimum suction");
-                }
+                await this.confirmSettings(D103.withOperationMode(originalMode, "vacuum"), 0,
+                    "vacuum mode and minimum suction");
                 await this.d103Robot.refreshDockState();
                 const now = this.d103Robot.getControlReadiness();
                 if (!now.ready || ![2, 6, 13].includes(now.status) || await this.robot.miotHelper.readProperty(4, 7) !== 0) {
@@ -104,6 +103,39 @@ class D103CNGoToLocationCapability extends DreameAICameraGoToLocationCapability 
         } finally {
             this.busy = false;
         }
+    }
+
+    /**
+     * Firmware acknowledges writes before its property cache is updated. Poll reads only.
+     * @param {number} expectedMode
+     * @param {number} expectedFan
+     * @param {string} description
+     */
+    async confirmSettings(expectedMode, expectedFan, description) {
+        const deadline = performance.now() + 5000;
+        let lastMode;
+        let lastFan;
+        do {
+            const response = await this.d103Robot.sendCommand("get_properties", [
+                {did: this.robot.deviceId, siid: 4, piid: 23},
+                {did: this.robot.deviceId, siid: 2, piid: 3}
+            ], {timeout: 700, noRetry: true});
+            const mode = Array.isArray(response) ? response.find(p => p.siid === 4 && p.piid === 23 && p.code === 0) : undefined;
+            const fan = Array.isArray(response) ? response.find(p => p.siid === 2 && p.piid === 3 && p.code === 0) : undefined;
+            if (!D103.validCleanSettings(mode?.value) || ![0, 1, 2, 3].includes(fan?.value)) {
+                throw new Error("Settings confirmation returned invalid telemetry");
+            }
+            lastMode = mode.value;
+            lastFan = fan.value;
+            if (lastMode === expectedMode && lastFan === expectedFan) {
+                this.d103Robot.parseAndUpdateState(response);
+                return;
+            }
+            if (performance.now() < deadline) {
+                await WAIT(200);
+            }
+        } while (performance.now() < deadline);
+        throw new Error(`Robot did not confirm ${description} within 5 seconds (mode=${lastMode}, suction=${lastFan})`);
     }
 
     save(record) {
@@ -183,19 +215,16 @@ class D103CNGoToLocationCapability extends DreameAICameraGoToLocationCapability 
         if (!D103.validCleanSettings(currentMode) || ![0, 1, 2, 3].includes(currentFan)) {
             throw new Error("Settings readback is invalid; restoration deferred");
         }
-        if (currentMode % 256 === 2 && r.originalMode % 256 !== 2) {
-            await this.robot.miotHelper.writeProperty(4, 23, D103.withOperationMode(currentMode, D103.operationMode(r.originalMode)));
+        const restoreMode = currentMode % 256 === 2 && r.originalMode % 256 !== 2 ?
+            D103.withOperationMode(currentMode, D103.operationMode(r.originalMode)) : currentMode;
+        const restoreFan = currentFan === 0 ? r.originalFan : currentFan;
+        if (restoreMode !== currentMode) {
+            await this.robot.miotHelper.writeProperty(4, 23, restoreMode);
         }
-        if (currentFan === 0 && r.originalFan !== 0) {
-            await this.robot.miotHelper.writeProperty(2, 3, r.originalFan);
+        if (restoreFan !== currentFan) {
+            await this.robot.miotHelper.writeProperty(2, 3, restoreFan);
         }
-        await WAIT(300);
-        const modeAfter = await this.robot.miotHelper.readProperty(4, 23);
-        const fanAfter = await this.robot.miotHelper.readProperty(2, 3);
-        if ((currentMode % 256 === 2 && modeAfter % 256 !== r.originalMode % 256) ||
-            (currentFan === 0 && fanAfter !== r.originalFan)) {
-            throw new Error("Restoration not confirmed; will retry while idle");
-        }
+        await this.confirmSettings(restoreMode, restoreFan, "restoration of the previous settings");
         fs.unlinkSync(JOURNAL);
         this.ownsActiveTask = false;
         clearInterval(this.timer); this.timer = null;
