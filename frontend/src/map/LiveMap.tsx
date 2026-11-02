@@ -173,7 +173,9 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
             <MapContainer style={{overflow: "hidden"}}>
                 {this.props.rawMap.metaData.savedMapSnapshot === true && <Alert severity="info"
                     sx={{position: "absolute", top: 8, left: 8, right: 8, zIndex: 2, pointerEvents: "none"}}>
-                    Saved device map #{String(this.props.rawMap.metaData.mapId)} — not live.
+                    {this.props.rawMap.metaData.relocalizationRequired === true ?
+                        "Current scan is not aligned with the saved map. Showing the saved map only." :
+                        `Saved device map #${String(this.props.rawMap.metaData.mapId)} — not live.`}
                     {this.props.rawMap.metaData.savedAt && ` Saved ${new Date(this.props.rawMap.metaData.savedAt).toLocaleString()}.`}
                     Robot position and cleaning path are not available in this snapshot.
                 </Alert>}

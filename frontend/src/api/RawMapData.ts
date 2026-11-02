@@ -90,6 +90,7 @@ export interface RawMapDataMetaData {
     version: number;
     nonce: string;
     savedMapSnapshot?: boolean;
+    relocalizationRequired?: boolean;
     mapId?: string;
     savedAt?: string;
 }
