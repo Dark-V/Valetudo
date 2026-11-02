@@ -1,4 +1,5 @@
 import {
+    Alert,
     Button,
     Grid2,
     LinearProgress,
@@ -135,6 +136,13 @@ const RobotStatus = (): React.ReactElement => {
                         {stateDetails}
                     </Grid2>
                 </Grid2>
+                {status?.value === "error" && (
+                    <Alert severity="error" sx={{mb: 1}}>
+                        {status.error?.message?.trim() || (status.error?.vendorErrorCode || status.metaData.nativeFault ?
+                            `Robot reported fault ${status.error?.vendorErrorCode || status.metaData.nativeFault}; no description is available.` :
+                            "Robot reports an error state without a fault description. Check the robot and its logs.")}
+                    </Alert>
+                )}
                 {dock && !["idle", "error"].includes(dock.value) && (
                     <Typography variant="body2" color="textSecondary" sx={{mb: 1}}>
                         {describeDockState(dock)}
