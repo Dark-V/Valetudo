@@ -5,11 +5,11 @@ const D103 = require("./D103CNProtocol");
 const D103CNCamera = require("./D103CNCamera");
 const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentStatisticsCapability");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
+const D103CNMapDecoder = require("./D103CNMapDecoder");
 const D103CNOperationModeControlCapability = require("./capabilities/D103CNOperationModeControlCapability");
 const D103CNSavedMap = require("./D103CNSavedMap");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
 const dgram = require("dgram");
-const DreameMapParser = require("./DreameMapParser");
 const DreameMiotHelper = require("./DreameMiotHelper");
 const DreameQuirkFactory = require("./DreameQuirkFactory");
 const DreameValetudoRobot = require("./DreameValetudoRobot");
@@ -134,6 +134,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
     sendCommand(method, args = [], options = {}) {
         if (!D103.commandAllowed(method, args, this.implConfig)) {
             return Promise.reject(new Error("D103CN: operation disabled or outside the model-specific allowlist"));
+        }
+        if (this.state.map.metaData.relocalizationRequired === true && method === "action" &&
+            args.siid === 4 && args.aiid === 1 && args.in.some(p => p.piid === 1 && [18, 19, 20, 23].includes(p.value))) {
+            return Promise.reject(new Error("Robot has not localized on the saved map; map-targeted cleaning is unavailable"));
         }
         // State/control uses the already verified local interface. A connected UDP socket is not auth proof.
         const prepare = method === "action" && ((args.siid === 2 && args.aiid === 1) ||
@@ -531,9 +535,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     async acceptMap(data) {
         const raw = D103.decodeMapEnvelope(data, {iv: this.implConfig.mapIv ?? D103PublicProfile.publicMapIv});
-        const parsed = await DreameMapParser.PARSE(raw);
+        const parsed = await D103CNMapDecoder.PARSE(raw);
         if (parsed) {
-            parsed.metaData.source = "D103CN live SDK map";
+            if (parsed.metaData.savedMapSnapshot !== true) {
+                parsed.metaData.source = "D103CN live SDK map";
+            }
             this.state.map = parsed;
             this.mapFramesParsed++;
             this.lastLiveMapAt = Date.now();
