@@ -1,7 +1,7 @@
 {
   "helper-trial.sh": {
     "baseSha256": "71e06c568f9012d0ca8cae0620b78b9b7962cde5e89487af5ef626e7e274037a",
-    "resultSha256": "726aecca97450e16f9c20721d0251cf5e5dc7e46303fcca4004a1d7b0cafcdb7",
+    "resultSha256": "debc3ca06ae3f5ee362b819620a31d5be0de22b4dc917f9ea343d5d2e447af85",
     "edits": [
       {
         "start": 2625,
@@ -16,7 +16,7 @@
       {
         "start": 12219,
         "end": 12219,
-        "text": "    trial_method=$(printf '%s\\n' \"$BUF\" | /usr/bin/jshon -e method -u 2>/dev/null || :)\n    case \"$trial_method\" in\n        _internal.info|_internal.req_wifi_conf_status|_internal.request_dinfo|_internal.request_dtoken|_internal.request_ot_config|_internal.record_offline) ;;\n        *) printf '%s\\n' \"${trial_method:-unknown}\" > \"$D103_SDK_TRIAL_DIR/helper-rejected\"; exit 91 ;;\n    esac\n"
+        "text": "    trial_method=$(printf '%s\\n' \"$BUF\" | /usr/bin/jshon -e method -u 2>/dev/null || :)\n    if [ -z \"$trial_method\" ]; then\n        # No method means no command can be dispatched. Ignore this one IPC\n        # frame instead of taking down the UI and the whole local SDK bridge.\n        printf '%s\\n' \"$BUF\" > \"$D103_SDK_TRIAL_DIR/helper-ignored.private.json\"\n        sleep 1\n        continue\n    fi\n    case \"$trial_method\" in\n        _internal.info|_internal.req_wifi_conf_status|_internal.request_dinfo|_internal.request_dtoken|_internal.request_ot_config|_internal.record_offline) ;;\n        *) printf '%s\\n' \"$BUF\" > \"$D103_SDK_TRIAL_DIR/helper-rejected.private.json\"; printf '%s\\n' \"$trial_method\" > \"$D103_SDK_TRIAL_DIR/helper-rejected\"; exit 91 ;;\n    esac\n"
       },
       {
         "start": 20720,

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prepare the tested local Dreame SDK/FDS chain; no firmware or Wi-Fi edits.
+# Prepare the local Dreame SDK/FDS chain; preserve firmware and Wi-Fi credentials.
 set -eu
 umask 077
 BASE=/data/.valetudo
@@ -11,6 +11,11 @@ flock -n 8 || exit 0
 [ "$(jshon -e Uid -u < /data/config/ava/clean_log.json)" = 1337 ]
 cd "$SDK"
 sha256sum -c stock.sha256 >/dev/null
+# Wi-Fi power saving causes multi-second TCP stalls on this board. Keep the
+# existing association and credentials; only change the volatile radio policy.
+if ! iw dev wlan0 set power_save off; then
+ echo 'WARNING: could not disable wlan0 power saving' >&2
+fi
 for n in $(seq 1 30); do
  old_sdk=$(pidof miio_client 2>/dev/null || :)
  old_helper=$(pidof miio_client_helper_nomqtt.sh 2>/dev/null || :)
