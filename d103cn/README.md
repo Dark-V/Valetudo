@@ -49,8 +49,10 @@ node ../util/generate_build_metadata.js
 PKG_CACHE_PATH=../build_dependencies/pkg node ../node_modules/@yao-pkg/pkg/lib-es5/bin.js --targets node22-linuxstatic-armv7 --compress GZip --no-bytecode --public-packages '*' --options 'expose-gc,max-heap-size=42' . --output ../build/d103cn/valetudo
 ```
 
-The tested packaging runtime is `built-v22.17.1-linuxstatic-armv7`. Follow upstream
-build-dependency preparation; do not substitute x86 or ARM64. Building does not
+The tested packaging runtime is `built-v22.17.1-linuxstatic-armv7`. Use the GZip
+package option above for this port; the hardware has little spare CPU during
+native navigation. Follow upstream build-dependency preparation; do not
+substitute x86 or ARM64. Building does not
 require executing the ARM program or emulating a robot. Do not run the Mock robot
 or MQTT documentation generator as part of this workflow.
 
@@ -89,6 +91,12 @@ validates exact stock hashes, model, RAM/temperature, process identity and local
 binding. It requires matching local UID `1337` in `device.uid` and
 `/data/config/ava/clean_log.json`; do not replace the whole cleaning-history file.
 The script refuses to start if this prior local-binding setup is absent.
+
+The launcher disables `wlan0` power saving without reconnecting Wi-Fi or changing
+credentials. On the tested board this reduced a gzip UI asset download from
+14.6 seconds to 1.7 seconds. SDK IPC frames with no `method` are ignored without
+dispatch; a named method outside the existing allowlist still stops the bridge.
+The last ignored/rejected frame stays in the private RAM runtime directory.
 
 For an already prepared installation:
 
