@@ -212,7 +212,9 @@ if [ "$continuous" = 1 ]; then
  ip -4 addr show dev wlan0 | awk '$1=="inet" {split($2,a,"/"); print a[1]; exit}' > "$LOCK/ip"
 fi
 listening=0
-for n in $(seq 1 55); do
+# ARM bootstrap can exceed 55 seconds under load. Keep the stock SDK running
+# until all three listeners are ready, with a bounded startup deadline.
+for n in $(seq 1 180); do
  kill -0 "$vt" 2>/dev/null || exit 1
  if netstat -lnut 2>/dev/null | awk '
   $4=="127.0.0.1:8053" {cloud=1}
@@ -221,7 +223,10 @@ for n in $(seq 1 55); do
   END {exit !(cloud && fds && http)}'; then listening=1; break; fi
  sleep 1
 done
-[ "$listening" = 1 ]
+if [ "$listening" != 1 ]; then
+ echo 'STOP: Valetudo listeners did not become ready within 180 seconds' >&2
+ exit 1
+fi
 # This is the stock SDK maintenance flag checked by miio_monitor.sh. It
 # prevents a second helper/client being started during the temporary handover.
 [ ! -e /tmp/restart_miio.mark ]
