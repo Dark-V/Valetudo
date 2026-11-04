@@ -298,7 +298,7 @@ const MapManagement = (): React.ReactElement => {
 
         if (editorAvailable) {
             items.unshift(<LinkListMenuItem key="pixelEditor" url="/options/map_management/editor"
-                primaryLabel="Pixel & door editor" secondaryLabel="Paint rooms, edit pixels and place protected doors"
+                primaryLabel="Map editor" secondaryLabel="Rooms, walls and doors"
                 icon={<MapAnnotationsIcon/>}/>);
         }
 

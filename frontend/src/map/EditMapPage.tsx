@@ -139,7 +139,7 @@ const EditMapPage = (props: {
         const door = mapData.entities.find(entity => entity.type === RawMapEntityType.Door &&
             entity.metaData.source === "user" && entity.metaData.id === doorId);
         if (floor === undefined || params.get("floor") !== String(floor) || door?.points.length !== 4) {
-            return <Alert severity="warning">This manual door is unavailable on the current floor. Reopen it in the pixel and door editor.</Alert>;
+            return <Alert severity="warning">This manual door is unavailable on the current floor. Reopen it in the map editor.</Alert>;
         }
         wallPoints = door.points;
         // Recreate the draft when the firmware restrictions or the selected door change.
