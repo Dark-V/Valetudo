@@ -87,7 +87,7 @@ closed/open transition and fresh physical-state reporting remain unverified.
   on this firmware changed the room IDs and areas while leaving the SLAM grid
   byte-for-byte intact. An arbitrary room polygon or pixel-writing action has
   not been identified. The room brush uses the separate factory backup/restore
-  service to update the saved segmentation for existing traversable cells.
+  service to update the saved segmentation and, for reopened cells, the occupancy grid.
 - **Barriers and thresholds.** The stock `vw` command sets navigation restrictions,
   including virtual walls. `vws` is a separate threshold-setting command. Neither
   edits the physical walls in the SLAM grid.
@@ -101,12 +101,13 @@ closed/open transition and fresh physical-state reporting remain unverified.
 - **Raster storage.** A stock backup from this D103CN contains the version 1.4
   ProbabilityGrid (`fine_large.bin`, 25 mm cells), five derived PNGs, room
   adjacency, door geometry and the floor's `.dat2` state. Replacing a PNG does
-  not update that grid or keep the other files in sync. There is no validated
-  native occupancy-write procedure for this build. The room brush changes
-  room membership on mapped free space and preserves the SLAM grid.
+  not update that grid or keep the other files in sync. For a reopened cell the room brush also edits
+  the corresponding four 25 mm samples in the ProbabilityGrid, the divider
+  rasters and the SDK room frame. New lidar observations can replace the
+  correction. Virtual walls and no-go zones remain separate.
 
 The editor validates the displayed floor against the selected floor's saved
-room raster (`last_app_map` → `rism` in its `.dat2`). A captured SDK frame
+room raster (`last_app_map` в†’ `rism` in its `.dat2`). A captured SDK frame
 retained the previous floor's ID after a switch. Comparing room geometry in
 three recorded frames accepted all three matching references and rejected the
 other floor each time. This check does not measure the live position of a door.

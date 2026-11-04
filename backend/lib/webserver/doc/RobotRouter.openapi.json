@@ -112,7 +112,7 @@
     "put": {
       "tags": ["Robot"],
       "summary": "Apply room assignments to the native floor",
-      "description": "Each run is [xCell, yCell, length, room:<id>]. The target must already exist. Only mapped traversable floor cells can be assigned. The complete request is limited to 65,536 cells. Poll GET for confirmation from the firmware.",
+      "description": "Each run is [xCell, yCell, length, room:<id>]. The target must already exist. Previously unknown or occupied cells inside the saved map frame can be reopened. The requested stroke can cover up to 65,536 cells and change at most 8,192 cells. Poll GET for confirmation from the firmware.",
       "requestBody": {
         "required": true,
         "content": {"application/json": {"schema": {
@@ -138,7 +138,7 @@
     "get": {
       "tags": ["Robot"],
       "summary": "Read the saved D103CN room divider raster for the native brush",
-      "description": "Each room includes its full labelled area and a nativePaintablePixels count of eligible floor cells. nativeUnavailableRuns contains [x, y, length] triples for labelled cells that may not be reassigned. Room writes must retain the nativeRevision from this response.",
+      "description": "Each room includes its full labelled area and a nativePaintablePixels count of recognized editable room cells. nativeUnavailableRuns contains [x, y, length] triples for labelled cells with unsupported encodings. Room writes must retain the nativeRevision from this response.",
       "responses": {
         "200": {"description": "Saved floor geometry and both draft revisions", "content": {"application/json": {"schema": {
           "type": "object", "required": ["floorId", "revision", "nativeRevision", "layers"],

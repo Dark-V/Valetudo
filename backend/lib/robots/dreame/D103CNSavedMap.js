@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const FineGrid = require("./D103CNNativeFineGrid");
 const fs = require("fs");
 const MapLayer = require("../../entities/map/MapLayer");
 const ValetudoMap = require("../../entities/map/ValetudoMap");
@@ -19,43 +20,7 @@ class D103CNSavedMap {
      * @returns {import("../../entities/map/ValetudoMap")}
      */
     static PARSE(data, info) {
-        if (data.length < 31 || data.length > 8 * 1024 * 1024 || data.readUInt16BE(0) !== 0xaabb ||
-            data.readUInt32BE(2) + 8 !== data.length || data.readUInt16BE(data.length - 2) !== 0xeeff ||
-            data[6] !== 1 || data[7] !== 4 || data.readUInt16BE(8) !== 25 ||
-            data.readUInt16BE(10) !== 8192 || data.readUInt16BE(12) !== 8192 || data.readUInt16BE(14) !== 4) {
-            throw new Error("Unsupported or incomplete D103CN saved-map header");
-        }
-        const x0 = data.readUInt16BE(16), y0 = data.readUInt16BE(18);
-        const x1 = data.readUInt16BE(20), y1 = data.readUInt16BE(22);
-        const width = x1 - x0 + 1, height = y1 - y0 + 1;
-        const length = data.readUInt32BE(25);
-        if (x1 >= 8192 || y1 >= 8192 || width < 1 || height < 1 || width * height > 2 * 1024 * 1024 ||
-            data[24] !== 1 || length + 31 !== data.length) {
-            throw new Error("Unsupported D103CN saved-map bounds or encoding");
-        }
-        const raw = Buffer.alloc(width * height * 4);
-        let offset = 0, repeat = 0;
-        for (let i = 29; i < 29 + length; i++) {
-            const value = data[i];
-            if (repeat) {
-                if (offset + repeat > raw.length) {
-                    throw new Error("Saved-map RLE exceeds declared bounds");
-                }
-                raw.fill(value, offset, offset + repeat);
-                offset += repeat;
-                repeat = 0;
-            } else if (value & 0x80) {
-                repeat = value & 0x7f;
-            } else {
-                if (offset >= raw.length) {
-                    throw new Error("Saved-map literal exceeds declared bounds");
-                }
-                raw[offset++] = value;
-            }
-        }
-        if (repeat || offset !== raw.length) {
-            throw new Error("Saved-map RLE length mismatch");
-        }
+        const {x0,y0,x1,y1,width,raw} = FineGrid.decode(data);
         // Native 25-mm cells -> standard 5-cm display pixels. Occupied wins
         // inside each 2x2 cell so thin saved obstacles are not erased.
         // Native ProbabilityGrid Y grows upwards (FetchGridmapROI maps

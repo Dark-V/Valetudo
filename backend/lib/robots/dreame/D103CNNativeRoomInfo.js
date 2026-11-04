@@ -122,11 +122,12 @@ function offsetFor(header, mapSize, pixelSize, x, y) {
  * @param {Buffer} riBuffer
  * @param {{x:number,y:number}} mapSize
  * @param {number} pixelSize
- * @param {Array<{x:number,y:number,from:number,to:number}>} edits
+ * @param {Array<{x:number,y:number,from:number,to:number,before?:{obstacle:number},ri?:number[]}>} edits
  * @param {Buffer} newNeighborTableBuffer
+ * @param {boolean} [restoring]
  * @returns {Buffer}
  */
-function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer) {
+function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer, restoring = false) {
     check(Buffer.isBuffer(riBuffer) && riBuffer.length <= 8 * 1024 * 1024, "invalid RI size");
     check(pixelSize === 5 && mapSize?.x === 6554 && mapSize?.y === 6554, "unknown SDK coordinate frame");
     check(Array.isArray(edits) && edits.length > 0 && edits.length <= 65536, "invalid cell batch");
@@ -148,31 +149,60 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer) {
             "saved room-neighbor copies disagree");
     }
     const seen = new Set();
-    for (const {x, y, from, to} of edits) {
+    for (const edit of edits) {
+        const {x, y, from, to} = edit;
         check(Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < Math.ceil(mapSize.x/pixelSize) &&
-            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && topology.has(from) && topology.has(to) && from !== to,
+            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && (topology.has(from) || (from === 0 && edit.before)) && topology.has(to),
         "invalid room-cell transition");
         const offset = offsetFor(inner.header, mapSize, pixelSize, x, y);
         check(offset >= 27 && !seen.has(offset), "cell outside saved room image or specified twice");
         seen.add(offset);
         const byte = inner.binary[offset];
-        check((byte & 128) === 0 && (byte & 63) === from, "saved room differs or cell is a wall");
-        inner.binary[offset] = (byte & 64) | to;
-
-        // Some RI files contain an unrelated/unaligned live scan around the
-        // selected saved map. Never paint that other coordinate frame.
-        if (sameFloor) {
-            const live = offsetFor(outer.header, mapSize, pixelSize, x, y);
-            if (live >= 27) {
-                const sample = outer.binary[live];
-                const id = sample >> 2;
-                if (id > 0 && id < 62) {
-                    check(id === from, "live and saved room labels disagree");
-                    outer.binary[live] = (to << 2) | (sample & 3);
-                } else {
-                    check(sample === 0, "conflicting live wall or newly discovered floor");
-                }
+        // The RISM uses bit 7 for walls and bit 6 for carpet; the outer
+        // (live) frame uses a different code. On this firmware an observed
+        // wall can be 0xfc in the outer frame and 0x80|room in the RISM.
+        // Only project into an outer frame that identifies this same floor.
+        const live = sameFloor ? offsetFor(outer.header, mapSize, pixelSize, x, y) : -1;
+        const sample = live < 27 ? -1 : outer.binary[live];
+        if (!edit.before) {
+            // Existing v36 journals only ever changed observed room labels.
+            const src = restoring ? to : from, dest = restoring ? from : to;
+            check((byte & 191) === src, "saved room differs or cell is a wall");
+            inner.binary[offset] = (byte & 64) | dest;
+            if (sample >= 0 && sample !== 0) {
+                check((sample >> 2) === src, "live and saved room labels disagree");
+                outer.binary[live] = (dest << 2) | (sample & 3);
             }
+            continue;
+        }
+        if (!restoring) {
+            check((byte & 191) === edit.before.obstacle, "saved room and divider disagree at the brush mark");
+            const segment = sample >> 2;
+            let writtenLive = -1;
+            // A clean log is a historical scan. The firmware republishes it
+            // independently after loading the room map. Only relabel an
+            // existing room in a current scan; leave gaps and sensor data alone.
+            if (outer.json.iscleanlog !== true && segment > 0 && segment < 62) {
+                check(segment === from, "another room occupies the live frame at this brush mark");
+                writtenLive = (to << 2) | (sample & 3);
+            }
+            edit.ri = [byte, sample, writtenLive];
+        }
+        check(Array.isArray(edit.ri) && [2,3].includes(edit.ri.length), "missing original saved cell");
+        const [oldSaved, oldLive] = edit.ri;
+        const paintedSaved = (oldSaved & 64) | to;
+        check(!restoring || byte === paintedSaved,
+            "the saved room cell has changed since painting; its newer reading was kept");
+        inner.binary[offset] = restoring ? oldSaved : paintedSaved;
+        // Two-element journals from v36.4 projected the room into every
+        // covered live sample. A scan may have replaced that projection.
+        let writtenLive = edit.ri[2];
+        if (writtenLive === undefined && oldLive >= 0) {
+            const oldSegment = oldLive >> 2;
+            writtenLive = (to << 2) | (oldSegment > 0 && oldSegment < 62 ? oldLive & 3 : (oldLive & 3) === 3 ? 3 : 0);
+        }
+        if (live >= 27 && writtenLive >= 0 && outer.json.iscleanlog !== true && (!restoring || sample === writtenLive)) {
+            outer.binary[live] = restoring ? oldLive : writtenLive;
         }
     }
     const innerMeta = replaceMembers(inner.metadata, new Map([
