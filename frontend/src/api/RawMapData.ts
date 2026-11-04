@@ -22,6 +22,9 @@ export interface RawMapEntityMetaData {
     angle?: number;
     label?: string;
     id?: string;
+    doorState?: "open" | "closed" | "unknown";
+    mapPassability?: "clear" | "blocked" | "unknown";
+    savedAt?: string;
 }
 
 export interface RawMapLayer {
@@ -84,6 +87,7 @@ export enum RawMapEntityType {
     Threshold = "threshold",
     Curtain = "curtain",
     Ramp = "ramp",
+    Door = "door",
 }
 
 export interface RawMapDataMetaData {
@@ -94,4 +98,12 @@ export interface RawMapDataMetaData {
     unlocalizedScan?: boolean;
     mapId?: string;
     savedAt?: string;
+    doorways?: {
+        available: boolean;
+        clear?: number;
+        blocked?: number;
+        unknown?: number;
+        physicalStateAvailable?: boolean;
+        savedAt?: string;
+    };
 }

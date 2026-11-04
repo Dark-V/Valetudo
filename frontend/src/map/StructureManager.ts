@@ -16,6 +16,7 @@ import CarpetMapStructure from "./structures/map_structures/CarpetMapStructure";
 import ThresholdMapStructure from "./structures/map_structures/ThresholdMapStructure";
 import CurtainMapStructure from "./structures/map_structures/CurtainMapStructure";
 import RampMapStructure from "./structures/map_structures/RampMapStructure";
+import DoorMapStructure from "./structures/map_structures/DoorMapStructure";
 
 const MAP_STRUCTURES = [
     ActiveZoneMapStructure,
@@ -31,6 +32,7 @@ const MAP_STRUCTURES = [
     VirtualWallMapStructure,
     ThresholdMapStructure,
     CurtainMapStructure,
+    DoorMapStructure,
 ] as const;
 type MapStructureType = typeof MAP_STRUCTURES[number]["TYPE"];
 
@@ -175,6 +177,12 @@ class StructureManager {
                         p0.x, p0.y,
                         p1.x, p1.y
                     ));
+                    break;
+                }
+                case RawMapEntityType.Door: {
+                    const a = this.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
+                    const b = this.convertCMCoordinatesToPixelSpace({x: e.points[2], y: e.points[3]});
+                    mapStructures.push(new DoorMapStructure(a.x, a.y, b.x, b.y, e.metaData));
                     break;
                 }
                 case RawMapEntityType.Curtain: {
@@ -327,6 +335,7 @@ const TYPE_SORT_MAPPING: Record<MapStructureType, number> = {
     [ThresholdMapStructure.TYPE]: 6,
     [CurtainMapStructure.TYPE]: 6,
     [RampMapStructure.TYPE]: 6,
+    [DoorMapStructure.TYPE]: 8,
 
     [ObstacleMapStructure.TYPE]: 7,
 
