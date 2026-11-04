@@ -20,6 +20,9 @@ not a claim that each intermediate source tree reproduces its original frontend.
 
 - Native live maps: rooms, robot position, station, travelled path; standard
   Dreame map coordinates and Valetudo entities.
+- Native detected doorway overlay: clear/blocked/unknown **map clearance**,
+  with tap details and native save time. Physical open/closed status is not
+  reported reliably by this firmware; [analysis and limits](DOORWAYS.md).
 - An unlocalized isolated-room scan is displayed in its own local coordinates.
   It is never overlaid on the saved apartment map or offered for room profiles.
   The standard pending-map dialog saves a new floor (`cw=5`) only when native

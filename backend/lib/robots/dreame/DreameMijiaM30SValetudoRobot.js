@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const D103 = require("./D103CNProtocol");
 const D103CNCamera = require("./D103CNCamera");
 const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentStatisticsCapability");
+const D103CNDoorways = require("./D103CNDoorways");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103CNMapDecoder = require("./D103CNMapDecoder");
 const D103CNOperationModeControlCapability = require("./capabilities/D103CNOperationModeControlCapability");
@@ -51,6 +52,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.savedMapFingerprint = null;
         this.savedMapSnapshots = 0;
         this.savedMapError = null;
+        this.doorways = new D103CNDoorways();
         this.lastLiveMapAt = 0;
         this.pollInFlight = null;
         this.stationActionPending = false;
@@ -545,6 +547,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             if (parsed.metaData.savedMapSnapshot !== true && parsed.metaData.unlocalizedScan !== true) {
                 parsed.metaData.source = "D103CN live SDK map";
             }
+            this.doorways.appendTo(parsed);
             this.state.map = parsed;
             this.mapFramesParsed++;
             this.lastLiveMapAt = Date.now();

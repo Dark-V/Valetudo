@@ -23,6 +23,7 @@ LineMapEntity.TYPE = Object.freeze({
 
     THRESHOLD: "threshold",
     CURTAIN: "curtain",
+    DOOR: "door",
 });
 
 

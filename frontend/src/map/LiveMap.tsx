@@ -191,6 +191,14 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
                         imageRendering: "crisp-edges"
                     }}
                 />
+                {this.props.rawMap.metaData.doorways?.available === true &&
+                    <div style={{position: "absolute", bottom: 8, left: 8, zIndex: 2,
+                        pointerEvents: "none", background: "rgba(24,24,24,.88)", color: "#eee",
+                        borderRadius: 4, padding: "5px 8px", fontSize: 12, maxWidth: "calc(100% - 16px)"}}>
+                        Doorways · map clearance · <span style={{color: "#53d68a"}}>clear {this.props.rawMap.metaData.doorways.clear ?? 0}</span>
+                        {" · "}<span style={{color: "#ff6868"}}>blocked {this.props.rawMap.metaData.doorways.blocked ?? 0}</span>
+                        {" · "}<span style={{color: "#f0be50"}}>unknown {this.props.rawMap.metaData.doorways.unknown ?? 0}</span>
+                    </div>}
                 {
                     this.supportedModes.length > 0 &&
                     <LiveMapModeSwitcher
