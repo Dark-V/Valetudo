@@ -79,3 +79,32 @@ openings. Existing map layers and non-door entities were unchanged. All eight
 were clear in their respective saved maps and retained unknown physical state.
 No robot emulator or synthetic closed-door fixture was used. A real
 closed/open transition and fresh physical-state reporting remain unverified.
+
+## Which edits affect native navigation?
+
+- **Room boundaries.** The stock map action (MIOT service 6, action 2, property 4)
+  accepts `dsr`/`dsrid` for a straight split and `msr` for a merge. A native split
+  on this firmware changed the room IDs and areas while leaving the SLAM grid
+  byte-for-byte intact. An arbitrary room polygon or pixel-writing action has
+  not been identified.
+- **Barriers and thresholds.** The stock `vw` command sets navigation restrictions,
+  including virtual walls. `vws` is a separate threshold-setting command. Neither
+  edits the physical walls in the SLAM grid.
+- **Structural doors.** `AvaNodeRoute::AppEditMap` in `node_limos.so` references
+  `wallInfoV2`, `wallInfoV3`, and `doorInfoV3`. `OnRequestEditWalls` in
+  `node_map_divide.so` (0xf2354) checks the selected floor before storing the
+  structural description. The [Dreame integration's editor](https://github.com/Tasshack/dreame-vacuum/blob/f5b8472b8e2e4bb3dff7bc2a81a5fd594eca9585/custom_components/dreame_vacuum/dreame/map.py#L3261-L3345)
+  moves the endpoints of existing walls/doors and preserves their counts. A
+  newly drawn door or an open/closed label in Valetudo therefore cannot establish
+  that a physical opening exists or that the robot will cross it.
+- **Raster storage.** A stock backup from this D103CN contains the version 1.4
+  ProbabilityGrid (`fine_large.bin`, 25 mm cells), five derived PNGs, room
+  adjacency, door geometry and the floor's `.dat2` state. Replacing a PNG does
+  not update that grid or keep the other files in sync. There is no validated
+  native raster-write procedure for this build.
+
+The editor validates the displayed floor against the selected floor's saved
+room raster (`last_app_map` → `rism` in its `.dat2`). A captured SDK frame
+retained the previous floor's ID after a switch. Comparing room geometry in
+three recorded frames accepted all three matching references and rejected the
+other floor each time. This check does not measure the live position of a door.

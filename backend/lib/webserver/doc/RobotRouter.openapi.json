@@ -50,6 +50,57 @@
       }
     }
   },
+  "/api/v2/robot/state/map/editor": {
+    "get": {
+      "tags": ["Robot"],
+      "summary": "Get the current D103CN map edit revision, native rooms and manually placed doors",
+      "responses": {
+        "200": {"description": "Localized floor ID, geometry revision, pixelSize in cm, rooms, doors and editedCells"},
+        "409": {"description": "No verified map for the currently selected floor"}
+      }
+    },
+    "put": {
+      "tags": ["Robot"],
+      "summary": "Save display cell corrections or manual doors for the current D103CN floor",
+      "description": "Each run is [xCell, yCell, length, brush]. Brushes are floor, wall, unknown, native or room:<native segment ID>. The optional doors array replaces only manually placed doors. Points are integer map centimetres.",
+      "requestBody": {
+        "required": true,
+        "content": {"application/json": {"schema": {
+          "type": "object",
+          "required": ["floorId", "revision"],
+          "properties": {
+            "floorId": {"type": "integer"},
+            "revision": {"type": "string"},
+            "runs": {"type": "array", "maxItems": 4096, "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {}}},
+            "doors": {"type": "array", "maxItems": 128, "items": {
+              "type": "object", "required": ["id", "points", "state"],
+              "properties": {
+                "id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+                "state": {"type": "string", "enum": ["open", "closed", "unknown"]},
+                "points": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}
+              }
+            }}
+          }
+        }}}
+      },
+      "responses": {
+        "200": {"description": "Persisted edit and new revision"},
+        "400": {"description": "Invalid runs, door geometry or request limits"},
+        "409": {"description": "Floor or geometry revision changed"},
+        "500": {"description": "Map edits could not be saved"}
+      }
+    }
+  },
+  "/api/v2/robot/state/map/editor/native": {
+    "get": {
+      "tags": ["Robot"],
+      "summary": "Read the actual D103CN room and occupancy layers used by native navigation",
+      "responses": {
+        "200": {"description": "Floor ID, matching editor revision and unaltered native map layers"},
+        "409": {"description": "No verified map for the currently selected floor"}
+      }
+    }
+  },
   "/api/v2/robot/properties": {
     "get": {
       "tags": [

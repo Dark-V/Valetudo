@@ -571,6 +571,7 @@ export interface ValetudoRestrictedZone {
 }
 
 export interface CombinedVirtualRestrictionsUpdateRequestParameters {
+    editorPrecondition?: {floorId: number; revision: string},
     virtualWalls: Array<{
         points: {
             pA: Point,

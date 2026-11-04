@@ -193,6 +193,8 @@ const MapManagement = (): React.ReactElement => {
         enabled: duststreamingCapabilitySupported
     });
     const duststreamingEnabled = duststreamingConfiguration?.enabled === true;
+    const {data: map} = useRobotMapQuery();
+    const editorAvailable = !!map?.metaData.mapEditor;
 
     const robotManagedListItems = React.useMemo(() => {
         const items = [];
@@ -294,6 +296,12 @@ const MapManagement = (): React.ReactElement => {
             />
         ];
 
+        if (editorAvailable) {
+            items.unshift(<LinkListMenuItem key="pixelEditor" url="/options/map_management/editor"
+                primaryLabel="Pixel & door editor" secondaryLabel="Paint rooms, edit pixels and place protected doors"
+                icon={<MapAnnotationsIcon/>}/>);
+        }
+
         if (duststreamingCapabilitySupported && duststreamingEnabled) {
             items.push(
                 <LinkListMenuItem
@@ -309,7 +317,7 @@ const MapManagement = (): React.ReactElement => {
         items.push(<ValetudoMapDataExportButtonItem key="valetudoMapDataExport" />);
 
         return items;
-    }, [duststreamingCapabilitySupported, duststreamingEnabled]);
+    }, [duststreamingCapabilitySupported, duststreamingEnabled, editorAvailable]);
 
     return (
         <PaperContainer>

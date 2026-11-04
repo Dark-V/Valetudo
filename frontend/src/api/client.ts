@@ -994,9 +994,11 @@ export const fetchCombinedVirtualRestrictionsProperties = async (): Promise<Comb
 export const sendCombinedVirtualRestrictionsUpdate = async (
     parameters: CombinedVirtualRestrictionsUpdateRequestParameters
 ): Promise<void> => {
+    const {editorPrecondition, ...restrictions} = parameters;
     await valetudoAPI.put(
         `/robot/capabilities/${Capability.CombinedVirtualRestrictions}`,
-        parameters
+        restrictions,
+        editorPrecondition ? {headers: {"If-Match": `"${editorPrecondition.floorId}:${editorPrecondition.revision}"`}} : undefined
     );
 };
 

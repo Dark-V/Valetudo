@@ -1,5 +1,5 @@
 import BaseMap, {MapContainer, MapProps, MapState, usePendingMapAction} from "./BaseMap";
-import {Capability} from "../api";
+import {Capability, RawMapEntityType} from "../api";
 import GoToTargetClientStructure from "./structures/client_structures/GoToTargetClientStructure";
 import {ActionsContainer} from "./Styled";
 import SegmentActions from "./actions/live_map_actions/SegmentActions";
@@ -169,6 +169,9 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
 
     render(): React.ReactElement {
         const PointActions = this.state.mode === "spot" ? SpotActions : GoToActions;
+        const detected = this.props.rawMap.metaData.doorways;
+        const manualCount = this.props.rawMap.entities.filter(e => e.type === RawMapEntityType.Door && e.metaData.source === "user").length;
+        const painted = this.props.rawMap.metaData.mapEditor?.editedCells ?? 0;
         return (
             <MapContainer style={{overflow: "hidden"}}>
                 {this.props.rawMap.metaData.unlocalizedScan === true && <Alert severity="info"
@@ -191,13 +194,15 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
                         imageRendering: "crisp-edges"
                     }}
                 />
-                {this.props.rawMap.metaData.doorways?.available === true &&
+                {(detected?.available || manualCount > 0 || painted > 0) &&
                     <div style={{position: "absolute", bottom: 8, left: 8, zIndex: 2,
                         pointerEvents: "none", background: "rgba(24,24,24,.88)", color: "#eee",
                         borderRadius: 4, padding: "5px 8px", fontSize: 12, maxWidth: "calc(100% - 16px)"}}>
-                        Doorways · map clearance · <span style={{color: "#53d68a"}}>clear {this.props.rawMap.metaData.doorways.clear ?? 0}</span>
-                        {" · "}<span style={{color: "#ff6868"}}>blocked {this.props.rawMap.metaData.doorways.blocked ?? 0}</span>
-                        {" · "}<span style={{color: "#f0be50"}}>unknown {this.props.rawMap.metaData.doorways.unknown ?? 0}</span>
+                        {(detected?.available || manualCount > 0) && "Doorways"}{detected?.available && <> · map clearance · <span style={{color: "#53d68a"}}>clear {detected.clear ?? 0}</span>
+                            {" · "}<span style={{color: "#ff6868"}}>blocked {detected.blocked ?? 0}</span>
+                            {" · "}<span style={{color: "#f0be50"}}>unknown {detected.unknown ?? 0}</span></>}
+                        {manualCount > 0 && <span style={{color: "#66daf5"}}> · manual {manualCount}</span>}
+                        {painted > 0 && <div>Edited pixels · room cleaning follows firmware boundaries</div>}
                     </div>}
                 {
                     this.supportedModes.length > 0 &&

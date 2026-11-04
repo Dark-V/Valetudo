@@ -14,6 +14,19 @@ class CombinedVirtualRestrictionsCapabilityRouter extends CapabilityRouter {
         });
 
         this.router.put("/", this.validator, async (req, res) => {
+            const condition = req.get("If-Match");
+            if (condition !== undefined) {
+                const match = /^"(\d{1,6}):([A-Za-z0-9.-]{1,160})"$/.exec(condition);
+                const robot = this.capability.robot;
+                if (!match || !robot.mapEditor) {
+                    return res.sendStatus(412);
+                }
+                try {
+                    robot.mapEditor.requireRevision(robot.state.map, Number(match[1]), match[2]);
+                } catch (_) {
+                    return res.status(412).send("The selected floor, door, or restrictions changed. Reopen the wall preview.");
+                }
+            }
             if (Array.isArray(req.body.virtualWalls) && Array.isArray(req.body.restrictedZones)) {
                 const virtualRestrictions = new ValetudoVirtualRestrictions({
                     virtualWalls: req.body.virtualWalls.map(requestWall => {

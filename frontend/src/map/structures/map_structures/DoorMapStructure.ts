@@ -18,8 +18,10 @@ class DoorMapStructure extends MapStructure {
         const ctx = ctxWrapper.getContext();
         const a = new DOMPoint(this.x0, this.y0).matrixTransform(matrix);
         const b = new DOMPoint(this.x1, this.y1).matrixTransform(matrix);
-        const state = this.metadata.mapPassability ?? "unknown";
-        const color = state === "clear" ? "#53d68a" : state === "blocked" ? "#ff6868" : "#f0be50";
+        const manual = this.metadata.source === "user";
+        const state = manual ? this.metadata.doorState : this.metadata.mapPassability;
+        const color = manual ? "#66daf5" :
+            state === "clear" ? "#53d68a" : state === "blocked" ? "#ff6868" : "#f0be50";
         const dx = b.x-a.x, dy = b.y-a.y, length = Math.hypot(dx, dy);
         if (length < 1) {
             return;
@@ -41,7 +43,7 @@ class DoorMapStructure extends MapStructure {
             ctx.lineTo(p.x+nx*jamb, p.y+ny*jamb);
         }
         ctx.stroke();
-        if (state === "blocked") {
+        if (state === "blocked" || state === "closed") {
             const x = (a.x+b.x)/2, y = (a.y+b.y)/2, r = considerHiDPI(3);
             ctx.beginPath(); ctx.moveTo(x-r, y-r); ctx.lineTo(x+r, y+r);
             ctx.moveTo(x-r, y+r); ctx.lineTo(x+r, y-r); ctx.stroke();
@@ -59,6 +61,10 @@ class DoorMapStructure extends MapStructure {
         const t = Math.max(0, Math.min(1, ((point.x-a.x)*dx+(point.y-a.y)*dy)/length2));
         if (Math.hypot(point.x-a.x-t*dx, point.y-a.y-t*dy) > considerHiDPI(9)) {
             return {stopPropagation: false};
+        }
+        if (this.metadata.source === "user") {
+            return {stopPropagation: true, openDialog: {title: "Manual door",
+                body: `Marked ${this.metadata.doorState ?? "unknown"} by the map editor. Edit it in Map Management → Pixel & door editor. Robot map updates preserve this door.`}};
         }
         const state = this.metadata.mapPassability ?? "unknown";
         const text = state === "clear" ? "The passage is clear in the map." :

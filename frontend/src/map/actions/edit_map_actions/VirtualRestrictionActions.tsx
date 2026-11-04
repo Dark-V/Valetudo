@@ -27,6 +27,7 @@ import {
 } from "../../../components/CustomIcons";
 
 interface VirtualRestrictionActionsProperties {
+    editorPrecondition?: {floorId: number; revision: string},
     robotStatus: StatusState,
     virtualWalls: Array<VirtualWallClientStructure>,
     noGoAreas: Array<NoGoAreaClientStructure>,
@@ -130,9 +131,10 @@ const VirtualRestrictionActions = (
                     }
                 };
             }),
-            restrictedZones: restrictedZones
+            restrictedZones: restrictedZones,
+            editorPrecondition: props.editorPrecondition
         });
-    }, [canEdit, saveRestrictions, virtualWalls, noGoAreas, noMopAreas, convertPixelCoordinatesToCMSpace]);
+    }, [canEdit, saveRestrictions, virtualWalls, noGoAreas, noMopAreas, convertPixelCoordinatesToCMSpace, props.editorPrecondition]);
 
     if (combinedVirtualRestrictionsPropertiesLoadError) {
         return (
