@@ -7,6 +7,7 @@ const D103CNCurrentStatisticsCapability = require("./capabilities/D103CNCurrentS
 const D103CNDoorways = require("./D103CNDoorways");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103CNMapDecoder = require("./D103CNMapDecoder");
+const D103CNMapEditor = require("./D103CNMapEditor");
 const D103CNOperationModeControlCapability = require("./capabilities/D103CNOperationModeControlCapability");
 const D103CNSavedMap = require("./D103CNSavedMap");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
@@ -53,6 +54,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.savedMapSnapshots = 0;
         this.savedMapError = null;
         this.doorways = new D103CNDoorways();
+        this.mapEditor = new D103CNMapEditor();
         this.lastLiveMapAt = 0;
         this.pollInFlight = null;
         this.stationActionPending = false;
@@ -548,6 +550,9 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                 parsed.metaData.source = "D103CN live SDK map";
             }
             this.doorways.appendTo(parsed);
+            if (this.implConfig.allowControls === true) {
+                this.mapEditor.observe(parsed);
+            }
             this.state.map = parsed;
             this.mapFramesParsed++;
             this.lastLiveMapAt = Date.now();
@@ -570,6 +575,39 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
 
     getManufacturer() {
         return "Xiaomi";
+    }
+
+    initModelSpecificWebserverRoutes(app) {
+        super.initModelSpecificWebserverRoutes(app);
+        const route = "/api/v2/robot/state/map/editor";
+        const handle = (req, res) => {
+            try {
+                if (this.implConfig.allowControls !== true) {
+                    res.status(403).json({message: "Map editing is disabled in this profile"});
+                    return;
+                }
+                if (req.route.path === route + "/native") {
+                    const map = this.state.map;
+                    const {floorId, revision} = this.mapEditor.describe(map);
+                    res.json({floorId: floorId, revision: revision, layers: map.layers});
+                } else if (req.method === "GET") {
+                    res.json(this.mapEditor.describe(this.state.map));
+                } else {
+                    const data = this.mapEditor.update(this.state.map, req.body);
+                    this.emitMapUpdated();
+                    res.json(data);
+                }
+            } catch (err) {
+                const status = err.status ?? 500;
+                if (status === 500) {
+                    Logger.error("D103CN map edit failed", err.message);
+                }
+                res.status(status).json({message: status === 500 ? "Map editor storage unavailable" : err.message});
+            }
+        };
+        app.get(route, handle);
+        app.get(route + "/native", handle);
+        app.put(route, handle);
     }
     getModelDetails() {
         return {supportedAttachments: ["mop", "watertank"], supportedDockComponents: ["water_tank_clean", "water_tank_dirty", "dustbag"]};

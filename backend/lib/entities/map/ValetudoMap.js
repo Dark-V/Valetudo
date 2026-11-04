@@ -4,6 +4,7 @@ const mapEntities = require("./entities");
 const MapLayer = require("./MapLayer");
 const SerializableEntity = require("../SerializableEntity");
 const ValetudoMapSegment = require("../core/ValetudoMapSegment");
+const presentations = new WeakMap();
 
 /**
  * Represents a Valetudo standard issue map
@@ -108,6 +109,16 @@ class ValetudoMap extends SerializableEntity { //TODO: Current, Historic, Etc.
                     material: e.metaData.material
                 });
             });
+    }
+
+    // A D103CN editor changes the published map while capability commands keep
+    // using the native layers, room IDs and coordinates in this instance.
+    setPresentation(map) {
+        presentations.set(this, map);
+    }
+
+    toJSON() {
+        return presentations.get(this) ?? this;
     }
 
     /**

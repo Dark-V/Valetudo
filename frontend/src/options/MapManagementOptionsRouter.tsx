@@ -8,6 +8,7 @@ import {Capability, useDuststreamingConfigurationQuery} from "../api";
 import React from "react";
 import RobotCoverageMapPage from "../map/RobotCoverageMapPage";
 import SpectatorMapPage from "../map/SpectatorMapPage";
+import PixelEditorPage from "../map/editor/PixelEditorPage";
 
 const OptionsRouter = (): React.ReactElement => {
     const [
@@ -40,6 +41,7 @@ const OptionsRouter = (): React.ReactElement => {
     return (
         <Routes>
             <Route path={""} element={<MapManagement />}/>
+            <Route path="editor" element={<PixelEditorPage/>}/>
             {roomProfilesSupported && <Route path="room_profiles" element={<RoomProfiles/>}/>}
 
             {

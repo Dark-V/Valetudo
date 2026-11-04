@@ -23,6 +23,21 @@ not a claim that each intermediate source tree reproduces its original frontend.
 - Native detected doorway overlay: clear/blocked/unknown **map clearance**,
   with tap details and native save time. Physical open/closed status is not
   reported reliably by this firmware; [analysis and limits](DOORWAYS.md).
+- **Pixel & door editor** in Map Management. Paint a single 5 cm cell or a
+  rectangle as a room, unassigned floor, wall or unknown. Pick **Restore robot
+  cells** to remove a saved correction. The editor keeps a correction until a
+  later native map changes the underlying cell. Undo and redo apply to the draft.
+- Draw a manual door between the jambs, mark it open, closed or unknown, then
+  save. These positions and labels belong to the owner and survive new scans of
+  the same floor. The door state records the owner's last selection.
+  Select a saved door and choose **Preview navigation wall here** to stage a
+  separate firmware restriction. **Save** in the wall editor while docked to
+  block that passage. Remove the restriction there to reopen the route.
+- Pixel painting changes Valetudo's displayed map. Room cleaning still follows
+  the firmware's room boundaries. **Edit navigation rooms** opens the native
+  split and merge tools. The editor saves on the robot in
+  `/data/.valetudo/map-editor/`; include this directory in owner backups.
+  Each floor can hold 65,536 painted cells and 128 manual doors.
 - An unlocalized isolated-room scan is displayed in its own local coordinates.
   It is never overlaid on the saved apartment map or offered for room profiles.
   The standard pending-map dialog saves a new floor (`cw=5`) only when native

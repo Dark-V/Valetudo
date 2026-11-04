@@ -33,6 +33,7 @@ interface EditMapProps extends MapProps {
         [Capability.MapAnnotations]: boolean
     }
     mode: mode,
+    doorWallPreview?: number[],
     helpText: string,
     robotStatus: StatusState,
     enqueueSnackbar: ProviderContext["enqueueSnackbar"]
@@ -87,6 +88,15 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
         };
 
         this.updateVirtualRestrictionClientStructures(props.mode !== "virtual_restrictions");
+        if (props.mode === "virtual_restrictions" && props.doorWallPreview) {
+            const [x0, y0, x1, y1] = props.doorWallPreview.map(cm => cm / props.rawMap.pixelSize);
+            const exists = this.structureManager.getClientStructures().some(w => w instanceof VirtualWallClientStructure &&
+                ((w.x0 === x0 && w.y0 === y0 && w.x1 === x1 && w.y1 === y1) ||
+                 (w.x0 === x1 && w.y0 === y1 && w.x1 === x0 && w.y1 === y0)));
+            if (!exists) {
+                this.structureManager.addClientStructure(new VirtualWallClientStructure(x0, y0, x1, y1, true));
+            }
+        }
         this.updateMapAnnotationsClientStructures(props.mode !== "annotations");
     }
 
@@ -226,11 +236,17 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
                 }
             });
         } else {
+            // Firmware restrictions are expressed in cm. Keep fractional map cells
+            // so adding one wall does not shift existing walls and zones on save.
+            const point = (coords: number[], start: number) => ({
+                x: coords[start] / this.props.rawMap.pixelSize,
+                y: coords[start + 1] / this.props.rawMap.pixelSize
+            });
             this.props.rawMap.entities.forEach(e => {
                 switch (e.type) {
                     case RawMapEntityType.VirtualWall: {
-                        const p0 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
-                        const p1 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[2], y: e.points[3]});
+                        const p0 = point(e.points, 0);
+                        const p1 = point(e.points, 2);
 
                         this.structureManager.addClientStructure(new VirtualWallClientStructure(
                             p0.x, p0.y,
@@ -240,10 +256,10 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
                         break;
                     }
                     case RawMapEntityType.NoGoArea: {
-                        const p0 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
-                        const p1 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[2], y: e.points[3]});
-                        const p2 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[4], y: e.points[5]});
-                        const p3 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[6], y: e.points[7]});
+                        const p0 = point(e.points, 0);
+                        const p1 = point(e.points, 2);
+                        const p2 = point(e.points, 4);
+                        const p3 = point(e.points, 6);
 
 
                         this.structureManager.addClientStructure(new NoGoAreaClientStructure(
@@ -256,10 +272,10 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
                         break;
                     }
                     case RawMapEntityType.NoMopArea: {
-                        const p0 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[0], y: e.points[1]});
-                        const p1 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[2], y: e.points[3]});
-                        const p2 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[4], y: e.points[5]});
-                        const p3 = this.structureManager.convertCMCoordinatesToPixelSpace({x: e.points[6], y: e.points[7]});
+                        const p0 = point(e.points, 0);
+                        const p1 = point(e.points, 2);
+                        const p2 = point(e.points, 4);
+                        const p3 = point(e.points, 6);
 
 
                         this.structureManager.addClientStructure(new NoMopAreaClientStructure(
@@ -518,6 +534,7 @@ class EditMap extends BaseMap<EditMapProps, EditMapState> {
 
                         <VirtualRestrictionActions
                             robotStatus={this.props.robotStatus}
+                            editorPrecondition={this.props.doorWallPreview ? this.props.rawMap.metaData.mapEditor : undefined}
                             virtualWalls={this.state.virtualWalls}
                             noGoAreas={this.state.noGoAreas}
                             noMopAreas={this.state.noMopAreas}

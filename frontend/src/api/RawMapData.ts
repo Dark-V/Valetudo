@@ -98,6 +98,7 @@ export interface RawMapDataMetaData {
     unlocalizedScan?: boolean;
     mapId?: string;
     savedAt?: string;
+    mapEditor?: {floorId: number; revision: string; editedCells: number};
     doorways?: {
         available: boolean;
         clear?: number;
