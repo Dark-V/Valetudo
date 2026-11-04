@@ -120,7 +120,7 @@ function needsCheck(bytes) {
 }
 
 function capture(bytes, edits) {
-    const cells = edits.filter(e => e.reopen);
+    const cells = edits.filter(e => e.reopen || e.to === 0);
     if (!cells.length) {
         return;
     }
@@ -138,19 +138,19 @@ function expected(e) {
 }
 
 function matches(bytes, edits, restored) {
-    const cells = edits.filter(e => e.reopen);
+    const cells = edits.filter(e => e.reopen || e.to === 0);
     if (!cells.length) {
         return true;
     }
     const g = decode(bytes);
     return cells.every(e => {
         const old = expected(e);
-        return samples(g,e.x,e.y).every((i,k) => read(g,i) === (restored ? old[k] : opened(old[k])));
+        return samples(g,e.x,e.y).every((i,k) => read(g,i) === (restored ? old[k] : e.to === 0 ? 0 : opened(old[k])));
     });
 }
 
 function correct(bytes, edits, restoring = false) {
-    const cells = edits.filter(e => e.reopen);
+    const cells = edits.filter(e => e.reopen || e.to === 0);
     if (!cells.length) {
         return bytes;
     }
@@ -159,7 +159,7 @@ function correct(bytes, edits, restoring = false) {
     check(Array.isArray(oldBounds) && oldBounds.length === 4, "missing original extent");
     shape(oldBounds);
     const extent = oldBounds.slice();
-    for (const {x,y} of cells) {
+    for (const {x,y} of cells.filter(e => e.to !== 0)) {
         const [left,bottom] = origin(x,y);
         extent[0]=Math.min(extent[0],left); extent[1]=Math.min(extent[1],bottom);
         extent[2]=Math.max(extent[2],left+1); extent[3]=Math.max(extent[3],bottom+1);
@@ -172,9 +172,10 @@ function correct(bytes, edits, restoring = false) {
     for (const e of cells) {
         const old = expected(e);
         samples(g,e.x,e.y).forEach((i,k) => {
-            const after = opened(old[k]);
-            check(i >= 0 && read(g,i) === (restoring ? after : old[k]), "cell changed since editing; reload the map");
+            const after = e.to === 0 ? 0 : opened(old[k]);
+            check(read(g,i) === (restoring ? after : old[k]), "cell changed since editing; reload the map");
             if (after !== old[k]) {
+                check(i >= 0, "grid no longer covers the edited cell");
                 g.raw.writeUInt32BE(restoring ? old[k] : after,i);
                 changed = true;
             }

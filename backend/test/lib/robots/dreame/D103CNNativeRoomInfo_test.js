@@ -63,4 +63,12 @@ describe("D103CN native room edits", () => {
         assert.deepEqual(pixels(prepare(roomInfo(7, 252, false), size, 5, [edit], neighbors, true)), {saved: 1, live: 252});
         assert.throws(() => prepare(roomInfo(135, 252, false), size, 5, [edit], neighbors, true), /saved room cell has changed/);
     });
+
+    it("clears a carpet-marked saved cell and restores its flag without changing cleaning history", () => {
+        const edit = {...stroke(7), to: 0};
+        const original = roomInfo(0x47, 31, true);
+        const erased = prepare(original, size, 5, [edit], neighbors);
+        assert.deepEqual(pixels(erased), {saved: 0, live: 31});
+        assert.deepEqual(pixels(prepare(erased, size, 5, [edit], neighbors, true)), {saved: 0x47, live: 31});
+    });
 });

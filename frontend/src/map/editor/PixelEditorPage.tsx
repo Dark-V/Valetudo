@@ -6,11 +6,11 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {Capability, CombinedVirtualRestrictionsUpdateRequestParameters, fetchStateAttributes, RawMapData,
     RawMapEntityType, RawMapLayer, RobotAttributeClass, sendCombinedVirtualRestrictionsUpdate, useRobotStatusQuery, valetudoAPI} from "../../api";
 import PaperContainer from "../../components/PaperContainer";
-import {brushRuns, Cell, Door, Edit, extendBrush, latestDoors, layerPaths, manualDoorColor, maxCells,
+import {applyRuns, brushRuns, Cell, Door, Edit, extendBrush, latestDoors, layerPaths, manualDoorColor, maxCells,
     mergedRuns, paintColor, rectRuns, Run, runPath, sameWalls, Snapshot, Wall} from "./geometry";
 
 const endpoint = "/robot/state/map/editor";
-type Tool = "pan" | "brush" | "rectangle" | "door" | "moveDoor" | "navigationWall";
+type Tool = "pan" | "brush" | "eraser" | "rectangle" | "door" | "moveDoor" | "navigationWall";
 type View = {x: number; y: number; w: number; h: number};
 type WallHandle = "start" | "end" | "body";
 type Gesture = {id: number; tool: Tool; start: Cell; last: Cell; cells: Set<number>;
@@ -130,7 +130,9 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
     const otherDraft = edits.length > 0 && !wallChange && !roomDraft;
     const walls = wallChange?.walls ?? savedWalls;
     const editingWalls = tool === "navigationWall" || !!wallChange;
-    const nativeBrush = nativeTarget && (tool === "brush" || tool === "rectangle" || roomDraft);
+    const freehand = tool === "brush" || tool === "eraser";
+    const painting = freehand || tool === "rectangle";
+    const nativeBrush = nativeTarget && (painting || roomDraft);
     const layerSource = nativeBrush ? roomEndpoint+"/layers" : editingWalls && state.editedCells > 0 ? endpoint+"/native" : null;
     const [draftBackdrop, setDraftBackdrop] = React.useState<NativeLayers>();
     const draftBasis = draftBackdrop?.nativeRevision;
@@ -160,6 +162,30 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
     const drawingMap = React.useMemo(() => layerSource ?
         {...map, layers: backdrop?.layers ?? []} : map, [map,layerSource,backdrop]);
     const paths = React.useMemo(() => layerPaths(drawingMap), [drawingMap]);
+    const savedRooms = React.useMemo(() => {
+        const cells = new Map<number,string>();
+        if (nativeBrush) {
+            for (const {value, runs, layer} of paths) {
+                if (layer.type === "segment") {
+                    for (const [x,y,n] of runs) {
+                        for (let k = y*width+x; k < y*width+x+n; k++) {
+                            cells.set(k,value);
+                        }
+                    }
+                }
+            }
+        }
+        return cells;
+    }, [nativeBrush,paths,width]);
+    const draftCells = React.useMemo(() => {
+        const cells = new Map<number,string>();
+        for (const edit of edits) {
+            if ("runs" in edit) {
+                applyRuns(cells,edit.runs,width,savedRooms);
+            }
+        }
+        return cells;
+    }, [edits,width,savedRooms]);
     const unavailable = React.useMemo(() => nativeBrush ? unavailablePath(drawingMap.layers) : "", [drawingMap,nativeBrush]);
     const {data: robotStatus} = useRobotStatusQuery();
     const doors = latestDoors(edits, state.doors);
@@ -233,9 +259,23 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
     }
     const baseGeometry = React.useMemo(() => paths.map(({path,value}, i) =>
         <path key={i} d={path} fill={paintColor(value)}/>), [paths]);
-    const committedPaint = React.useMemo(() => edits.map((edit, i) =>
-        "runs" in edit && !!edit.runs.length && <path key={i} d={runPath(edit.runs)}
-            fill={paintColor(edit.runs[0][3])}/>), [edits]);
+    const draftPaint = React.useMemo(() => {
+        const cells = preview.length ? new Map(draftCells) : draftCells;
+        if (preview.length) {
+            applyRuns(cells,preview,width,savedRooms);
+        }
+        const byColor = new Map<string,Run[]>();
+        for (const run of mergedRuns(cells,width)) {
+            const color = paintColor(run[3]);
+            const group = byColor.get(color);
+            if (group) {
+                group.push(run);
+            } else {
+                byColor.set(color,[run]);
+            }
+        }
+        return Array.from(byColor, ([color,runs]) => <path key={color} d={runPath(runs)} fill={color}/>);
+    }, [draftCells,preview,width,savedRooms]);
     const append = (edit: Edit) => {
         setEdits(list => [...list, edit]); setFuture([]); setWarning(""); setNotice("");
     };
@@ -256,22 +296,41 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
         if (g.tool === "pan") {
             setView(v => ({...v, x: Math.min(width-1, Math.max(1-v.w, v.x+g.start.x-p.x)),
                 y: Math.min(height-1, Math.max(1-v.h, v.y+g.start.y-p.y))}));
-        } else if (g.tool === "brush" || g.tool === "rectangle") {
+        } else if (g.tool === "brush" || g.tool === "eraser" || g.tool === "rectangle") {
             let runs: Run[];
-            if (g.tool === "brush") {
+            if (g.tool !== "rectangle") {
                 extendBrush(g.cells, g.last, target, width, height, Math.floor(brushSize/2));
                 if (g.cells.size > maxCells) {
                     throw new Error("Stroke too large. Try a smaller area.");
                 }
-                runs = brushRuns(g.cells, width, paint);
+                if (g.tool === "eraser" && nativeTarget) {
+                    const selectedCells = new Set<number>();
+                    for (const key of g.cells) {
+                        if ((draftCells.get(key) ?? savedRooms.get(key)) === paint) {
+                            selectedCells.add(key);
+                        }
+                    }
+                    runs = brushRuns(selectedCells,width,"erase:" + roomId);
+                } else {
+                    runs = brushRuns(g.cells,width,g.tool === "eraser" ? "native" : paint);
+                }
             } else {
                 runs = rectRuns(g.start, target, paint);
             }
             if (finish) {
+                if (!runs.length) {
+                    setWarning("No cells of the selected room under the eraser.");
+                    return;
+                }
+                const combined = new Map(draftCells);
+                applyRuns(combined,runs,width,savedRooms);
+                if (combined.size > maxCells) {
+                    throw new Error("Save at most 65,536 cells at a time.");
+                }
                 if (nativeTarget && !roomDraft) {
                     setDraftBackdrop(native.data);
                 }
-                append({runs: runs, nativeRoom: nativeTarget});
+                append({runs: runs, nativeRoom: nativeTarget, tool: g.tool, paint: paint});
             } else {
                 setPreview(runs);
             }
@@ -396,7 +455,7 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
                 }
                 throw new Error("Wall command sent. The robot has not returned the new lines yet. Reload the floor to check.");
             }
-            const runs = mergedRuns(edits, width);
+            const runs = mergedRuns(draftCells,width);
             const payload = {floorId: state.floorId, revision: state.revision,
                 runs: runs.length ? runs : undefined, doors: edits.some(edit => "doors" in edit) ? doors : undefined};
             if (runs.length > 4096 || new Blob([JSON.stringify(payload)]).size > 95 * 1024) {
@@ -461,31 +520,37 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
         node.addEventListener("wheel",wheel,{passive:false});
         return () => node.removeEventListener("wheel",wheel);
     }, [zoom]);
-    const options = {pan: "Pan", brush: "Brush", rectangle: "Rectangle", door: "Add door", moveDoor: "Redraw selected door",
+    const options = {pan: "Pan", rectangle: "Rectangle", door: "Add door", moveDoor: "Redraw selected door",
         navigationWall:"Navigation walls"};
-    const painting = tool === "brush" || tool === "rectangle";
     const editingDoors = tool === "door" || tool === "moveDoor" || (tool === "pan" && !!selected);
     const roomProblem = roomOp?.phase === "needs_recovery" || roomOp?.phase === "failed";
     return <Stack spacing={1}>
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
-            {painting && <TextField select size="small" label={nativeTarget ? "Room" : "Overlay only"} value={paint}
+            {painting && (nativeTarget || tool !== "eraser") && <TextField select size="small" label={nativeTarget ? "Room" : "Overlay only"} value={paint}
                 disabled={busy || (otherDraft && nativeTarget)} onChange={e => setPaint(e.target.value)} sx={{minWidth: 140}}>
                 {state.rooms.map(r => <MenuItem key={r.id} value={"room:" + r.id}>{r.name || "Room"} #{r.id}</MenuItem>)}
                 {!nativeTarget && Object.entries({floor: "Unassigned floor", wall: "Wall pixel", unknown: "Erase to unknown", native: "Restore robot cells"})
                     .map(([key,label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}
             </TextField>}
-            <TextField select size="small" label="Tool" value={tool} disabled={busy}
+            {(["brush","eraser"] as const).map(value => <Button key={value} aria-pressed={tool === value}
+                variant={tool === value ? "contained" : "outlined"}
+                disabled={busy || !!wallChange || (otherDraft && nativeTarget)}
+                onClick={() => setTool(value)}>{value === "brush" ? "Brush" : "Eraser"}</Button>)}
+            <TextField select size="small" label="Tool" value={freehand ? "" : tool} disabled={busy}
+                SelectProps={{displayEmpty:true}} InputLabelProps={{shrink:true}}
                 onChange={e => setTool(e.target.value as Tool)} sx={{minWidth: 125}}>
+                <MenuItem value="" disabled>Other tools</MenuItem>
                 {Object.entries(options).map(([key,label]) => <MenuItem key={key} value={key}
                     disabled={(key === "moveDoor" && !selected) || (!!wallChange && !["pan","navigationWall"].includes(key)) ||
-                        (roomDraft && !["pan","brush","rectangle"].includes(key)) ||
-                        (otherDraft && nativeTarget && ["brush","rectangle"].includes(key)) ||
+                        (roomDraft && !["pan","rectangle"].includes(key)) ||
+                        (otherDraft && nativeTarget && key === "rectangle") ||
                         (key === "navigationWall" && edits.length > 0 && !wallChange)}>{label}</MenuItem>)}
             </TextField>
-            {edits.length > 0 && <Button variant="contained" disabled={busy || wallWritePendingReadback ||
+            {edits.length > 0 && (!roomDraft || draftCells.size > 0) && <Button variant="contained" disabled={busy || wallWritePendingReadback ||
                 (roomDraft && (!roomOp?.available || roomOpQuery.isError || !mapGeometryReady)) ||
                 (!!wallChange && (!mapGeometryReady || robotStatus?.value !== "docked"))} onClick={save}>
                 {wallChange ? "Save walls" : roomDraft ? "Save room" : "Save edits"}</Button>}
+            {roomDraft && !draftCells.size && <Typography variant="caption">No room changes to save.</Typography>}
             {nativeBrush && roomVerified && !edits.length && <Button variant="contained" disabled={!mapGeometryReady || busy ||
                 (robotStatus?.value !== "docked" && robotStatus?.value !== "idle")}
             onClick={cleanSavedRoom}>Clean {roomName}</Button>}
@@ -495,7 +560,7 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
             {future.length > 0 && <Button disabled={busy} onClick={() => {
                 const next = future[0];
                 if ("runs" in next) {
-                    setNativeTarget(next.nativeRoom); setPaint(next.runs[0][3]); setTool("brush");
+                    setNativeTarget(next.nativeRoom); setPaint(next.paint); setTool(next.tool);
                 } else {
                     setTool("walls" in next ? "navigationWall" : "door");
                 }
@@ -515,7 +580,7 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
                     <MenuItem value="native" disabled={!firstRoom}>Room on robot</MenuItem>
                     <MenuItem value="display">Display overlay only</MenuItem>
                 </TextField>}
-                {tool === "brush" && <TextField select size="small" label="Brush width" value={brushSize}
+                {freehand && <TextField select size="small" label={tool === "eraser" ? "Eraser width" : "Brush width"} value={brushSize}
                     disabled={busy} onChange={e => setBrushSize(Number(e.target.value))}>
                     {[1,3,5,9].map(n => <MenuItem key={n} value={n}>{n} px · {n*map.pixelSize} cm</MenuItem>)}
                 </TextField>}
@@ -539,9 +604,11 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
         </Stack>
         <Typography variant="caption" color="text.secondary">{tool === "navigationWall" ?
             "Drag to add a wall. Drag its line or ends to move it." :
-            tool === "pan" ? "Drag to pan." : tool === "brush" ? "Drag to paint." :
+            tool === "pan" ? "Drag to pan." : tool === "brush" ? "Drag to paint." : tool === "eraser" ?
+                (nativeTarget ? "Drag to erase cells of the selected room to unknown. The robot can map them again." :
+                    "Drag to remove display edits and reveal the robot’s map.") :
                 tool === "rectangle" ? "Drag between opposite corners." : "Drag between the door jambs."}
-        {nativeBrush && " Paint across stale obstacles to mark floor."} Scroll to zoom.
+        {nativeBrush && painting && tool !== "eraser" && " Paint across stale obstacles to mark floor."} Scroll to zoom.
         {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
         {nativeBrush && !mapGeometryReady && <Alert severity={staleGeometry ? "warning" : "info"}
@@ -583,8 +650,7 @@ function Editor({data: {map, state}, generation, reload, refreshing, savedNotice
                 </pattern><pattern id="editor-grid" width={1} height={1} patternUnits="userSpaceOnUse">
                     <path d="M0 1V0H1" fill="none" stroke="#ddd" strokeWidth={.055}/>
                 </pattern></defs>
-                <g shapeRendering="crispEdges">{baseGeometry}{committedPaint}
-                    {preview.length > 0 && <path d={runPath(preview)} fill={paintColor(paint)} opacity={.85}/>}</g>
+                <g shapeRendering="crispEdges">{baseGeometry}{draftPaint}</g>
                 {unavailable && <path d={unavailable} fill="url(#unavailable-native)" pointerEvents="none"/>}
                 {Math.max(view.w, view.h) < 95 &&
                     <rect width={width} height={height} fill="url(#editor-grid)" opacity={.55} pointerEvents="none"/>}

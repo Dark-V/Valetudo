@@ -83,7 +83,7 @@ function exactSnapshot(archive,id, alternate = {}) {
 
 function rasterMatches(current, edits, original) {
     return !!current.raster && edits.every(e => {
-        const expected = original ? (e.sdkBefore ?? (e.from ? e.from + 3 : 1)) : e.to + 3;
+        const expected = original ? (e.sdkBefore ?? (e.from ? e.from + 3 : 1)) : e.to === 0 ? 0 : e.to + 3;
         return current.raster[e.y*current.width+e.x] === expected;
     });
 }
@@ -198,7 +198,7 @@ class D103CNNativeRoomEditor {
         this.working = true;
         const op = restore ? previous.operationId : crypto.randomUUID();
         this.record = {...(restore ? previous : {}), floorId: floor, operationId: op,
-            phase: restore ? "restoring" : "applying", roomIds: [...new Set(edits.map(e => String(e.to)))],
+            phase: restore ? "restoring" : "applying", roomIds: [...new Set(edits.map(e => String(e.to || e.from)))],
             message: restore ? "Checking the saved native floor." : "Checking the native room mask.", edits: edits};
         this.execute(body, restore, previous).finally(() => {
             this.working = false;
