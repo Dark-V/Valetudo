@@ -94,7 +94,8 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     savedNotice: string; initialRoomId?: string
 }) {
     const firstRoom = state.rooms.find(r => r.id === initialRoomId)?.id ?? state.rooms[0]?.id;
-    const [tool, setTool] = React.useState<Tool>(initialRoomId ? "brush" : "pan");
+    const [tool, setTool] = React.useState<Tool>(firstRoom ? "brush" : "pan");
+    const [more, setMore] = React.useState(false);
     const [paint, setPaint] = React.useState(firstRoom ? "room:" + firstRoom : "floor");
     const [nativeTarget, setNativeTarget] = React.useState(!!firstRoom);
     const [brushSize, setBrushSize] = React.useState(1);
@@ -457,13 +458,17 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     }, [zoom]);
     const options = {pan: "Pan", brush: "Brush", rectangle: "Rectangle", door: "Add door", moveDoor: "Redraw selected door",
         navigationWall:"Navigation walls"};
-    return <Stack spacing={1.5}>
-        <Typography variant="h5">Pixel &amp; door editor · floor {state.floorId}</Typography>
-        <Typography variant="body2" sx={{"& a": {color: "primary.main"}}}>Use the wheel or trackpad to zoom at the pointer.
-            Use Navigation walls to change barriers that the robot obeys. Manual door markers stay until you edit them.{" "}
-        <Link to="/options/map_management/segments">Split or merge native rooms</Link> ·{" "}
-        <Link to="/options/map_management/virtual_restrictions">Manage no-go and no-mop zones</Link>.</Typography>
+    const painting = tool === "brush" || tool === "rectangle";
+    const editingDoors = tool === "door" || tool === "moveDoor" || (tool === "pan" && !!selected);
+    const roomProblem = roomOp?.phase === "needs_recovery" || roomOp?.phase === "failed";
+    return <Stack spacing={1}>
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
+            {painting && <TextField select size="small" label={nativeTarget ? "Room" : "Overlay only"} value={paint}
+                disabled={busy || (otherDraft && nativeTarget)} onChange={e => setPaint(e.target.value)} sx={{minWidth: 140}}>
+                {state.rooms.map(r => <MenuItem key={r.id} value={"room:" + r.id}>{r.name || "Room"} #{r.id}</MenuItem>)}
+                {!nativeTarget && Object.entries({floor: "Unassigned floor", wall: "Wall pixel", unknown: "Erase to unknown", native: "Restore robot cells"})
+                    .map(([key,label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}
+            </TextField>}
             <TextField select size="small" label="Tool" value={tool} disabled={busy}
                 onChange={e => setTool(e.target.value as Tool)} sx={{minWidth: 125}}>
                 {Object.entries(options).map(([key,label]) => <MenuItem key={key} value={key}
@@ -472,47 +477,94 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                         (otherDraft && nativeTarget && ["brush","rectangle"].includes(key)) ||
                         (key === "navigationWall" && edits.length > 0 && !wallChange)}>{label}</MenuItem>)}
             </TextField>
-            {(tool === "brush" || tool === "rectangle") && <TextField select size="small" label="Edit target"
-                value={nativeTarget ? "native" : "display"} disabled={busy || !!edits.length} sx={{minWidth:160}}
-                onChange={e => {
-                    const nativeRoom = e.target.value === "native";
-                    setNativeTarget(nativeRoom); setPaint(nativeRoom ? "room:" + firstRoom : "floor");
-                }}>
-                <MenuItem value="native" disabled={!firstRoom}>Room on robot</MenuItem>
-                <MenuItem value="display">Display overlay only</MenuItem>
-            </TextField>}
-            {(tool === "brush" || tool === "rectangle") && <TextField select size="small" label="Paint" value={paint}
-                disabled={busy || (otherDraft && nativeTarget)} onChange={e => setPaint(e.target.value)} sx={{minWidth: 150}}>
-                {state.rooms.map(r => <MenuItem key={r.id} value={"room:" + r.id}>{r.name || "Room"} #{r.id}</MenuItem>)}
-                {!nativeTarget && Object.entries({floor: "Unassigned floor", wall: "Wall pixel (display)", unknown: "Erase to unknown", native: "Restore robot cells"})
-                    .map(([key,label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}
-            </TextField>}
-            {tool === "brush" && <TextField select size="small" label="Brush width" value={brushSize}
-                disabled={busy} onChange={e => setBrushSize(Number(e.target.value))}>
-                {[1,3,5,9].map(n => <MenuItem key={n} value={n}>{n} px · {n*map.pixelSize} cm</MenuItem>)}
-            </TextField>}
-            <Button size="small" aria-label="Zoom in" onClick={() => zoom(.65)}>Zoom +</Button>
-            <Button size="small" aria-label="Zoom out" onClick={() => zoom(1/.65)}>Zoom −</Button>
-            <Button size="small" disabled={!mapGeometryReady} onClick={() => setView(fitView(drawingMap))}>Fit</Button>
+            {edits.length > 0 && <Button variant="contained" disabled={busy || wallWritePendingReadback ||
+                (roomDraft && (!roomOp?.available || roomOpQuery.isError || !mapGeometryReady)) ||
+                (!!wallChange && (!mapGeometryReady || robotStatus?.value !== "docked"))} onClick={save}>
+                {wallChange ? "Save walls" : roomDraft ? "Save room" : "Save edits"}</Button>}
+            {nativeBrush && roomVerified && !edits.length && <Button variant="contained" disabled={!mapGeometryReady || busy ||
+                (robotStatus?.value !== "docked" && robotStatus?.value !== "idle")}
+            onClick={cleanSavedRoom}>Clean {roomName}</Button>}
+            {edits.length > 0 && <Button disabled={busy} onClick={() => {
+                setFuture([edits[edits.length-1], ...future]); setEdits(edits.slice(0,-1));
+            }}>Undo</Button>}
+            {future.length > 0 && <Button disabled={busy} onClick={() => {
+                const next = future[0];
+                if ("runs" in next) {
+                    setNativeTarget(next.nativeRoom); setPaint(next.runs[0][3]); setTool("brush");
+                } else {
+                    setTool("walls" in next ? "navigationWall" : "door");
+                }
+                setEdits([...edits, next]); setFuture(future.slice(1));
+            }}>Redo</Button>}
+            <Button size="small" aria-expanded={more} aria-controls="map-editor-options" onClick={() => setMore(!more)}>
+                {more ? "Less" : "More"}</Button>
         </Stack>
-        <Typography variant="caption">{tool === "navigationWall" ?
-            "Drag on empty space to draw a barrier. Drag the red line to move it, or drag either endpoint to resize. Save while docked." :
-            tool === "pan" ? "Drag to pan. Switch to Brush or Rectangle to resize a room." :
-                tool === "brush" ? "Tap to paint one brush mark or drag to trace a boundary." :
-                    tool === "rectangle" ? "Drag between opposite corners to paint a filled rectangle." :
-                        "Drag between the two door jambs to set its position and width."} One cell = {map.pixelSize} cm.
-        {(tool === "brush" || tool === "rectangle") && room &&
-                ` ${nativeBrush ? "Saved room area" : "Displayed room area"}: ${(room.dimensions.pixelCount * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
-        {nativeBrush && room?.metaData.nativePaintablePixels !== undefined &&
-                ` Confirmed editable floor: ${(room.metaData.nativePaintablePixels * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
+        <Stack id="map-editor-options" spacing={1} sx={{display: more ? "flex" : "none"}}>
+            <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
+                {painting && <TextField select size="small" label="Edit target"
+                    value={nativeTarget ? "native" : "display"} disabled={busy || !!edits.length} sx={{minWidth:160}}
+                    onChange={e => {
+                        const nativeRoom = e.target.value === "native";
+                        setNativeTarget(nativeRoom); setPaint(nativeRoom ? "room:" + firstRoom : "floor");
+                    }}>
+                    <MenuItem value="native" disabled={!firstRoom}>Room on robot</MenuItem>
+                    <MenuItem value="display">Display overlay only</MenuItem>
+                </TextField>}
+                {tool === "brush" && <TextField select size="small" label="Brush width" value={brushSize}
+                    disabled={busy} onChange={e => setBrushSize(Number(e.target.value))}>
+                    {[1,3,5,9].map(n => <MenuItem key={n} value={n}>{n} px · {n*map.pixelSize} cm</MenuItem>)}
+                </TextField>}
+                <Button size="small" aria-label="Zoom in" onClick={() => zoom(.65)}>Zoom +</Button>
+                <Button size="small" aria-label="Zoom out" onClick={() => zoom(1/.65)}>Zoom −</Button>
+                <Button size="small" disabled={!mapGeometryReady} onClick={() => setView(fitView(drawingMap))}>Fit</Button>
+                <Button size="small" disabled={busy} onClick={() => edits.length ? setConfirmReload(true) : reload()}>Reload floor</Button>
+                {edits.length > 0 && <Button size="small" disabled={busy} onClick={() => {
+                    setEdits([]); setFuture([]); setWarning("");
+                }}>Discard draft</Button>}
+                {roomOp?.canRollback && roomOp.floorId === state.floorId && !roomProblem &&
+                    <Button size="small" disabled={busy || !!edits.length} onClick={() => setConfirmRestore(true)}>Undo saved room edit</Button>}
+            </Stack>
+            <Typography variant="caption" sx={{"& a":{color:"primary.main"}}}>Floor {state.floorId} ·{" "}
+                <Link to="/options/map_management/segments">Split or merge rooms</Link> ·{" "}
+                <Link to="/options/map_management/virtual_restrictions">Restricted zones</Link>
+                {painting && room && ` · ${(room.dimensions.pixelCount * map.pixelSize ** 2 / 10000).toFixed(2)} m²`}
+                {nativeBrush && room?.metaData.nativePaintablePixels !== undefined &&
+                    ` · Editable: ${(room.metaData.nativePaintablePixels * map.pixelSize ** 2 / 10000).toFixed(2)} m²`}
+            </Typography>
+        </Stack>
+        <Typography variant="caption" color="text.secondary">{tool === "navigationWall" ?
+            "Drag to add a wall. Drag its line or ends to move it." :
+            tool === "pan" ? "Drag to pan." : tool === "brush" ? "Drag to paint." :
+                tool === "rectangle" ? "Drag between opposite corners." : "Drag between the door jambs."}
+        {nativeBrush && " Hatched cells cannot be painted."} Scroll to zoom.
         {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
-        {nativeBrush && <Typography variant="caption">Hatching marks saved room cells containing an obstacle or unconfirmed floor.
-            Paint confirmed floor into a room, save it on the robot, then choose Clean after firmware confirmation.</Typography>}
         {nativeBrush && !mapGeometryReady && <Alert severity={native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ? "warning" : "info"}>
             {native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ?
                 "Saved room geometry is unavailable or changed. Reload the floor before drawing." : "Loading the saved navigation area…"}
         </Alert>}
+        {(nativeBrush || isRunning(roomOp) || roomOp?.canRollback || roomProblem) && <Stack spacing={1}>
+            {roomOpQuery.isError && <Alert severity="warning">Native writer status unavailable.
+                <Button onClick={() => void roomOpQuery.refetch()}>Check status</Button></Alert>}
+            {roomOp?.message && (roomProblem || isRunning(roomOp)) && roomOp.message !== warning && <Alert severity={roomProblem ? "warning" : "info"}>
+                {roomOp.message}</Alert>}
+            {roomProblem && roomOp?.canRollback && roomOp.floorId === state.floorId &&
+                <Button disabled={busy || !!edits.length} onClick={() => setConfirmRestore(true)}>
+                    {roomOp.phase === "needs_recovery" ? "Recover floor from snapshot" : "Undo saved room edit"}
+                </Button>}
+            {confirmRestore && <Alert severity="warning">
+                {roomOp?.phase === "needs_recovery" ?
+                    `Recover the entire native floor ${state.floorId} from its pre-edit snapshot? This may replace later changes to this floor.` :
+                    `Undo the last saved room edit on floor ${state.floorId}? Its cells will be reverted against the latest native map.`}
+                <Button disabled={busy} onClick={restoreRoom}>
+                    {roomOp?.phase === "needs_recovery" ? "Restore snapshot" : "Undo saved cells"}
+                </Button>
+                <Button onClick={() => setConfirmRestore(false)}>Cancel</Button>
+            </Alert>}
+        </Stack>}
+        {warning && <Alert severity="warning">{warning}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
+        {confirmReload && <Alert severity="warning">Reload and discard the current draft?
+            <Button onClick={() => reload()}>Reload</Button><Button onClick={() => setConfirmReload(false)}>Keep editing</Button></Alert>}
         <Box sx={{backgroundColor: "#101317", border: "1px solid #596069", borderRadius: 1}}>
             <svg ref={svg} role="img" aria-label="Editable floor map" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
                 style={{width: "100%", height: "min(55vh, 620px)", minHeight: 240, touchAction: "none", display: "block",
@@ -592,7 +644,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 {native.isError ? "Native room geometry changed. Reload the floor." : "Loading native navigation geometry…"}
             </Alert>}
         </Stack>}
-        {!editingWalls && !roomDraft && !nativeBrush && <>
+        {editingDoors && !editingWalls && !roomDraft && <>
             <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
                 <TextField select size="small" label="Manual door" value={selected?.id ?? ""} disabled={busy}
                     onChange={e => {
@@ -620,56 +672,6 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             <Typography variant="caption">Cyan doors are yours. Grey dashed lines are detected openings. Marking a door closed
             records your observation. A saved virtual wall blocks navigation independently of this door.</Typography>
         </>}
-        {(nativeBrush || isRunning(roomOp) || roomOp?.canRollback || roomOp?.phase === "needs_recovery") && <Stack spacing={1}>
-            {roomOpQuery.isError && <Alert severity="warning">Native writer status unavailable.
-                <Button onClick={() => void roomOpQuery.refetch()}>Check status</Button></Alert>}
-            {roomOp?.message && <Alert severity={roomOp.phase === "needs_recovery" || roomOp.phase === "failed" ? "warning" : "info"}>
-                {roomOp.message}</Alert>}
-            <Stack direction="row" gap={1}>
-                {nativeBrush && roomId && <Button disabled={!roomVerified || !mapGeometryReady || busy || !!edits.length ||
-                    (robotStatus?.value !== "docked" && robotStatus?.value !== "idle")}
-                onClick={cleanSavedRoom}>Clean {roomName}</Button>}
-                {roomOp?.canRollback && roomOp.floorId === state.floorId &&
-                    <Button disabled={busy || !!edits.length} onClick={() => setConfirmRestore(true)}>
-                        {roomOp.phase === "needs_recovery" ? "Recover floor from snapshot" : "Undo saved room edit"}
-                    </Button>}
-            </Stack>
-            {confirmRestore && <Alert severity="warning">
-                {roomOp?.phase === "needs_recovery" ?
-                    `Recover the entire native floor ${state.floorId} from its pre-edit snapshot? This may replace later changes to this floor.` :
-                    `Undo the last saved room edit on floor ${state.floorId}? Its cells will be reverted against the latest native map.`}
-                <Button disabled={busy} onClick={restoreRoom}>
-                    {roomOp?.phase === "needs_recovery" ? "Restore snapshot" : "Undo saved cells"}
-                </Button>
-                <Button onClick={() => setConfirmRestore(false)}>Cancel</Button>
-            </Alert>}
-        </Stack>}
-        {warning && <Alert severity="warning">{warning}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
-        <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
-            <Button variant="contained" disabled={busy || !edits.length || wallWritePendingReadback ||
-                (roomDraft && (!roomOp?.available || roomOpQuery.isError || !mapGeometryReady)) ||
-                (!!wallChange && (!mapGeometryReady || robotStatus?.value !== "docked"))} onClick={save}>
-                {wallChange ? "Save navigation walls to robot" : roomDraft ? "Save room on robot" : "Save edits"}</Button>
-            <Button disabled={busy || !edits.length} onClick={() => {
-                setFuture([edits[edits.length-1], ...future]);
-                setEdits(edits.slice(0,-1));
-            }}>Undo</Button>
-            <Button disabled={busy || !future.length} onClick={() => {
-                const next = future[0];
-                if ("runs" in next) {
-                    setNativeTarget(next.nativeRoom); setPaint(next.runs[0][3]); setTool("brush");
-                } else {
-                    setTool("walls" in next ? "navigationWall" : "door");
-                }
-                setEdits([...edits, next]); setFuture(future.slice(1));
-            }}>Redo</Button>
-            <Button disabled={busy || !edits.length} onClick={() => {
-                setEdits([]); setFuture([]); setWarning("");
-            }}>Discard draft</Button>
-            <Button disabled={busy} onClick={() => edits.length ? setConfirmReload(true) : reload()}>Reload floor</Button>
-        </Stack>
-        {confirmReload && <Alert severity="warning">Reload and discard the current draft?
-            <Button onClick={() => reload()}>Reload</Button><Button onClick={() => setConfirmReload(false)}>Keep editing</Button></Alert>}
     </Stack>;
 }
 

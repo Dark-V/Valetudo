@@ -176,7 +176,7 @@ const menuTree: Array<MenuEntry | MenuSubEntry | MenuSubheader> = [
     {
         kind: "MenuSubEntry",
         route: "/options/map_management/editor",
-        title: "Pixel & door editor",
+        title: "Map editor",
         parentRoute: "/options/map_management"
     },
     {

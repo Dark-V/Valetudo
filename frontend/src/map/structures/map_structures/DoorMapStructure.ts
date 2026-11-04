@@ -64,7 +64,7 @@ class DoorMapStructure extends MapStructure {
         }
         if (this.metadata.source === "user") {
             return {stopPropagation: true, openDialog: {title: "Manual door",
-                body: `Marked ${this.metadata.doorState ?? "unknown"} by the map editor. Edit it in Map Management → Pixel & door editor. Robot map updates preserve this door.`}};
+                body: `Marked ${this.metadata.doorState ?? "unknown"} by the map editor. Edit it in Map Management → Map editor. Robot map updates preserve this door.`}};
         }
         const state = this.metadata.mapPassability ?? "unknown";
         const text = state === "clear" ? "The passage is clear in the map." :

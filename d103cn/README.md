@@ -23,12 +23,12 @@ not a claim that each intermediate source tree reproduces its original frontend.
 - Native detected doorway overlay: clear/blocked/unknown **map clearance**,
   with tap details and native save time. Physical open/closed status is not
   reported reliably by this firmware; [analysis and limits](DOORWAYS.md).
-- In **Map Management → Pixel & door editor**, select **Brush** or **Rectangle**,
-  choose **Room on robot** and an existing room, then paint its boundary. Wheel
-  zoom stays under the pointer. **Save room on robot** applies while docked.
-  Wait for confirmation before starting room cleaning. The stock room ID stays
-  the same. Paint across adjacent mapped free cells. The editor rejects unseen
-  space, obstacle cells, and strokes that split a room into extra pieces.
+- Open the editor from **Map Management**. When the floor has rooms, the brush
+  is ready to edit their saved boundaries. Choose a room and paint adjacent
+  mapped floor. Save while the robot is docked. Once the robot confirms the
+  boundary, choose **Clean** for that room. The room keeps its stock ID.
+  Scroll to zoom around the pointer. Unseen space, obstacles and strokes that
+  would split a room into separate pieces cannot be saved.
   The brush shows the saved divider raster. The room area includes all
   labelled cells. Hatching identifies cells that the saved occupancy and
   obstacle masks do not confirm as editable floor. A separate grid revision
@@ -41,8 +41,8 @@ not a claim that each intermediate source tree reproduces its original frontend.
   block that passage. Remove the restriction there to reopen the route.
 - **Navigation walls** supports drawing, moving the line or either endpoint,
   and removing a barrier. Saving waits for the stock map to report the lines.
-  **Display overlay only** keeps visual corrections separate from native room
-  boundaries. The stock split and merge tools are also available.
+  Open **More** for display-only corrections and other editor settings. The
+  stock split and merge tools are also available.
 - The room editor captures the factory backup, edits the divider masks and
   room information in that archive, and supplies it to the stock restore
   service through loopback. Confirmation requires both native segmentation
