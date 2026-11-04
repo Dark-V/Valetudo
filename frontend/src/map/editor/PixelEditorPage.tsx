@@ -197,7 +197,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         if (!roomOp?.canRollback || roomOp.floorId !== state.floorId || !roomOp.operationId) {
             return;
         }
-        setSaving(true); setWarning(""); setConfirmRestore(false);
+        setSaving(true); setWarning(""); setNotice(""); setConfirmRestore(false);
         try {
             const {data} = await valetudoAPI.post<RoomOperation>(roomEndpoint+"/restore",{
                 floorId:state.floorId,operationId:roomOp.operationId

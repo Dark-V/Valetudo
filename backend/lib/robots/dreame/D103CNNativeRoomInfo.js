@@ -178,22 +178,31 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer, re
         if (!restoring) {
             check((byte & 191) === edit.before.obstacle, "saved room and divider disagree at the brush mark");
             const segment = sample >> 2;
-            check(sample < 0 || sample === 0 || segment === from || segment === 62 || segment === 63,
-                "another room occupies the live frame at this brush mark");
-            edit.ri = [byte, sample];
+            let writtenLive = -1;
+            // A clean log is a historical scan. The firmware republishes it
+            // independently after loading the room map. Only relabel an
+            // existing room in a current scan; leave gaps and sensor data alone.
+            if (outer.json.iscleanlog !== true && segment > 0 && segment < 62) {
+                check(segment === from, "another room occupies the live frame at this brush mark");
+                writtenLive = (to << 2) | (sample & 3);
+            }
+            edit.ri = [byte, sample, writtenLive];
         }
-        check(Array.isArray(edit.ri) && edit.ri.length === 2, "missing original saved cell");
+        check(Array.isArray(edit.ri) && [2,3].includes(edit.ri.length), "missing original saved cell");
         const [oldSaved, oldLive] = edit.ri;
         const paintedSaved = (oldSaved & 64) | to;
-        // Reproduce the regular frame's observed per-room encoding. For
-        // unsegmented space keep carpet if present, discard its obstacle type.
-        const paintedLive = oldLive < 0 ? -1 : (to << 2) |
-            ((oldLive >> 2) > 0 && (oldLive >> 2) < 62 ? oldLive & 3 : Number((oldLive & 3) === 3) * 3);
-        check(!restoring || (byte === paintedSaved && sample === paintedLive),
-            "the robot has rescanned this cell; its newer saved or live reading was kept");
+        check(!restoring || byte === paintedSaved,
+            "the saved room cell has changed since painting; its newer reading was kept");
         inner.binary[offset] = restoring ? oldSaved : paintedSaved;
-        if (live >= 27) {
-            outer.binary[live] = restoring ? oldLive : paintedLive;
+        // Two-element journals from v36.4 projected the room into every
+        // covered live sample. A scan may have replaced that projection.
+        let writtenLive = edit.ri[2];
+        if (writtenLive === undefined && oldLive >= 0) {
+            const oldSegment = oldLive >> 2;
+            writtenLive = (to << 2) | (oldSegment > 0 && oldSegment < 62 ? oldLive & 3 : (oldLive & 3) === 3 ? 3 : 0);
+        }
+        if (live >= 27 && writtenLive >= 0 && outer.json.iscleanlog !== true && (!restoring || sample === writtenLive)) {
+            outer.binary[live] = restoring ? oldLive : writtenLive;
         }
     }
     const innerMeta = replaceMembers(inner.metadata, new Map([
