@@ -138,7 +138,7 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer) {
     check(Number.isInteger(ri.last_app_map_id) && ri.last_app_map_id === inner.header.id, "saved floor identity mismatch");
     const sameFloor = Number(outer.json.curid) === ri.last_app_map_id && outer.json.ris === 2;
     if (!sameFloor) {
-        check(!outer.binary.subarray(27).some(sample => sample >> 2 > 0 && sample >> 2 < 62),
+        check(!outer.binary.subarray(27).some(sample => (sample >> 2) > 0 && (sample >> 2) < 62),
             "outer frame contains rooms with an unverified floor origin");
     }
     const savedInfo = JSON.parse(ri.seg_info);

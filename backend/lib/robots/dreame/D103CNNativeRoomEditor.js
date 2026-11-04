@@ -104,6 +104,7 @@ class D103CNNativeRoomEditor {
         this.robot = robot;
         this.instruction = null;
         this.working = false;
+        this.lastRecheck = 0;
         this.journal = path.join(ROOT, "last.json");
         this.record = {phase: "idle", message: "", floorId: null, operationId: null, roomIds: []};
         if (fs.existsSync(this.journal)) {
@@ -367,7 +368,8 @@ class D103CNNativeRoomEditor {
         const r = this.robot;
         for (let i=0; i<65; i++) {
             if (i % 15 === 0) {
-                r.pollMap().catch(() => {});
+                // pollMap schedules the next SDK poll and returns void.
+                r.pollMap();
             }
             await sleep(2000);
             const state = await this.stockState().catch(() => null);
@@ -389,6 +391,44 @@ class D103CNNativeRoomEditor {
             }
         }
         throw new Error("The new native room mask could not be verified on disk and in a fresh firmware frame. Backup retained.");
+    }
+
+    // A service restart or lost reply can occur after the firmware has already
+    // loaded the floor. Resolve the remaining journal from a new SDK frame and
+    // native disk data; never repeat the recovery command to find out.
+    async reconcile() {
+        const r = this.robot, op = this.record, current = r.mapEditor.current;
+        if (op.phase !== "needs_recovery" || this.working || !current ||
+            current.floorId !== op.floorId || !Array.isArray(op.edits) || !op.edits.length ||
+            Date.now() - this.lastRecheck < 5000) {
+            return;
+        }
+        this.lastRecheck = Date.now();
+        this.working = true;
+        try {
+            const state = await this.stockState();
+            if (state[4] !== 3 || r.mapEditor.current !== current ||
+                JSON.parse(file("/data/ri/config.json2").toString()).curr_id !== op.floorId ||
+                digest(file("/data/map/"+op.floorId+"/fine_large.bin")) !== op.gridHash) {
+                return;
+            }
+            const files = nativeFiles(op.floorId);
+            for (const original of [false,true]) {
+                if (op.edits.every(e => current.raster[e.y*current.width+e.x] === 3+(original ? e.from : e.to)) &&
+                    Mask.matches(files,op.size,op.pixelSize,op.edits,original)) {
+                    r.mapEditor.inheritRestoredFloor(r.state.map,op.editorIdentity);
+                    this.store(original ? "restored" : "confirmed", original ?
+                        "Original native room mask verified." : "Native room changes confirmed after service recovery.");
+                    r.emitMapUpdated();
+                    this.releaseStage();
+                    break;
+                }
+            }
+        } catch (_) {
+            // A missing or transient frame is not a reason to modify the map.
+        } finally {
+            this.working = false;
+        }
     }
 }
 

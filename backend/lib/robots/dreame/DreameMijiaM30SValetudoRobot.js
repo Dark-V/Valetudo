@@ -564,6 +564,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             }
             this.state.map = parsed;
             this.mapFramesParsed++;
+            void this.nativeRooms.reconcile();
             this.lastLiveMapAt = Date.now();
             this.mapLastError = null;
             this.emitMapUpdated();
@@ -621,7 +622,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         app.get(route, handle);
         app.get(route + "/native", handle);
         app.put(route, handle);
-        app.get(route + "/rooms", (req,res) => res.json(this.nativeRooms.status()));
+        app.get(route + "/rooms", (req,res) => {
+            void this.nativeRooms.reconcile();
+            res.json(this.nativeRooms.status());
+        });
         const changeRooms = (req,res) => {
             if (this.implConfig.allowControls !== true) {
                 return res.sendStatus(403);
