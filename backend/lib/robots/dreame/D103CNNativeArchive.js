@@ -13,7 +13,7 @@ const DIVIDE_FILES = [
     "segmented_map_with_obstacle_large.png"
 ];
 const EDITABLE = ["segmented_map_large.png", "segmented_map_with_obstacle_large.png",
-    "segmented_map_color.png", "room_neighbor_table_large.json"];
+    "segmented_map_color.png", "room_neighbor_table_large.json", "slam_map.png", "contours_with_obstacle_large.png"];
 
 function check(ok, message) {
     if (!ok) {
@@ -98,7 +98,8 @@ function readTar(raw, floorId) {
 }
 
 function replaceTar(archive, replacements) {
-    const id = String(archive.floorId), allowed = new Set([id + ".dat2", ...EDITABLE.map(n => "divide/" + id + "/" + n)]);
+    const id = String(archive.floorId), allowed = new Set([id + ".dat2", id + "/fine_large.bin",
+        ...EDITABLE.map(n => "divide/" + id + "/" + n)]);
     const edits = replacements instanceof Map ? new Map(replacements) : new Map(Object.entries(replacements));
     check(edits.size && [...edits].every(([name, data]) => allowed.has(name) && archive.members.has(name) &&
         Buffer.isBuffer(data) && data.length && data.length <= 8 * 1024 * 1024), "invalid replacement");

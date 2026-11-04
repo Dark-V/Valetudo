@@ -113,7 +113,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     const [wallWritePendingReadback, setWallWritePendingReadback] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
     const [confirmRestore, setConfirmRestore] = React.useState(false);
-    const [awaitingOp, setAwaitingOp] = React.useState<{id: string; roomId?: string}>();
+    const [awaitingOp, setAwaitingOp] = React.useState<{id: string; roomId?: string; restoring: boolean}>();
     const queryClient = useQueryClient();
     const roomQueryKey = ["d103_native_room_operation",state.floorId];
     const roomOpQuery = useQuery({queryKey: roomQueryKey, queryFn:getRoomOperation,
@@ -169,7 +169,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         !!roomId && roomOp.roomIds.map(String).includes(roomId);
     React.useEffect(() => {
         if (!awaitingOp && roomOp?.operationId && roomOp.floorId === state.floorId && isRunning(roomOp)) {
-            setAwaitingOp({id:roomOp.operationId, roomId:roomOp.roomIds[0]});
+            setAwaitingOp({id:roomOp.operationId, roomId:roomOp.roomIds[0], restoring:roomOp.phase === "restoring"});
             return;
         }
         if (!awaitingOp || !roomOp || isRunning(roomOp)) {
@@ -180,7 +180,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             setWarning(roomOp.message || "The active native edit changed. Reload the floor.");
             return;
         }
-        if (roomOp.phase === "confirmed" || roomOp.phase === "restored") {
+        if (roomOp.phase === (awaitingOp.restoring ? "restored" : "confirmed")) {
             setEdits([]); setFuture([]); reload(roomOp.message, awaitingOp.roomId);
         } else {
             setWarning(roomOp.message || "Firmware could not confirm the room update.");
@@ -191,7 +191,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             throw new Error("The robot did not identify the operation on this floor. Reload its status.");
         }
         queryClient.setQueryData(roomQueryKey,op);
-        setAwaitingOp({id:op.operationId,roomId:roomId});
+        setAwaitingOp({id:op.operationId,roomId:roomId,restoring:op.phase === "restoring"});
     }
     async function restoreRoom() {
         if (!roomOp?.canRollback || roomOp.floorId !== state.floorId || !roomOp.operationId) {
@@ -536,7 +536,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             "Drag to add a wall. Drag its line or ends to move it." :
             tool === "pan" ? "Drag to pan." : tool === "brush" ? "Drag to paint." :
                 tool === "rectangle" ? "Drag between opposite corners." : "Drag between the door jambs."}
-        {nativeBrush && " Hatched cells cannot be painted."} Scroll to zoom.
+        {nativeBrush && " Paint across stale obstacles to mark floor."} Scroll to zoom.
         {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
         {nativeBrush && !mapGeometryReady && <Alert severity={native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ? "warning" : "info"}>

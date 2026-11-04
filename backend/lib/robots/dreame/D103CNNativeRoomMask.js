@@ -158,8 +158,26 @@ function nativeSource(files, mapSize, pixelSize) {
 }
 
 function paintable(source, i) {
-    return source.ids.has(source.base[i]) && source.base[i] === source.obstacle[i] &&
-        source.slam[i] === 0 && source.contour[i] === 255;
+    const base = source.base[i], obstacle = source.obstacle[i], label = obstacle & 127;
+    return (base === 0 || source.ids.has(base)) && (label === 0 || source.ids.has(label)) &&
+        [0, 99, 255].includes(source.slam[i]) && [0, 180, 255].includes(source.contour[i]);
+}
+
+function needsObservation(source, i) {
+    return source.slam[i] !== 0 || source.contour[i] !== 255 || (source.obstacle[i] & 128) !== 0;
+}
+
+function roomPalette(ids, obstacle, color) {
+    const palette = new Map();
+    // Factory debug colours are constant per free-room ID, apart from white text labels.
+    for (let p = 0; p < obstacle.length; p++) {
+        const id = obstacle[p], rgb = color.readUIntBE(3 * p, 3);
+        if (ids.has(id) && rgb !== 0xffffff) {
+            check(!palette.has(id) || palette.get(id) === rgb, "unknown room colour encoding");
+            palette.set(id, rgb);
+        }
+    }
+    return palette;
 }
 
 function appendUnavailable(runs, x, y) {
@@ -182,16 +200,28 @@ class D103CNNativeRoomMask {
      * @param {Object<string, Buffer>} files
      * @param {{x: number, y: number}} mapSize
      * @param {number} pixelSize
-     * @param {Array<{x: number,y: number,from: number,to: number}>} edits
+     * @param {Array<{x:number,y:number,from:number,to:number,before?:{obstacle:number,slam:number,contour:number,color:number}}>} edits
      * @param {boolean} [restored]
      */
     static matches(files, mapSize, pixelSize, edits, restored = false) {
         check(Array.isArray(edits) && edits.length && edits.length <= 65536, "invalid readback cells");
-        const {width, height, offset} = nativeGeometry(files, mapSize, pixelSize);
-        const base = image(files[names.base], width, height, 1), obstacle = image(files[names.obstacle], width, height, 1);
-        return edits.every(({x, y, from, to}) => {
+        const {width, height, offset, base, obstacle, slam, contour, ids} = nativeSource(files, mapSize, pixelSize);
+        const color = image(files[names.color], width, height, 3);
+        const palette = roomPalette(ids, obstacle, color);
+        return edits.every(({x, y, from, to, before}) => {
             const i = offset(x, y), target = restored ? from : to;
-            return i >= 0 && base[i] === target && obstacle[i] === target;
+            if (i < 0 || base[i] !== target) {
+                return false;
+            }
+            if (!before) { // A confirmed edit journal from v36.
+                return obstacle[i] === target;
+            }
+            if (restored) {
+                return obstacle[i] === before.obstacle && slam[i] === before.slam && contour[i] === before.contour &&
+                    color.readUIntBE(3*i, 3) === before.color;
+            }
+            const rgb = from === to && before.obstacle === to ? before.color : palette.get(to);
+            return obstacle[i] === to && slam[i] === 0 && contour[i] === 255 && color.readUIntBE(3*i, 3) === rgb;
         });
     }
 
@@ -200,8 +230,8 @@ class D103CNNativeRoomMask {
         const WALL = 64, FLOOR = 65;
         const counts = new Uint32Array(66), labels = new Uint8Array(s.base.length);
         for (let i = 0; i < labels.length; i++) {
-            // The saved free-room ID matches the RISM view. Keep its full area
-            // visible even when the raw SLAM grid cannot support repainting it.
+            // Keep the saved room/obstacle presentation. A brush can replace
+            // a recognized stale observation even if the cell currently has no room.
             const room = s.obstacle[i];
             const blocked = (room & 128) || s.contour[i] === 0 || s.slam[i] === 99;
             const floor = s.contour[i] === 255 && s.slam[i] === 0;
@@ -259,7 +289,7 @@ class D103CNNativeRoomMask {
         });
     }
 
-    static editsFromRuns(files, mapSize, pixelSize, runs) {
+    static editsFromRuns(files, mapSize, pixelSize, runs, fineOccupied = undefined) {
         check(Array.isArray(runs) && runs.length > 0 && runs.length <= 4096, "invalid room brush runs");
         const s = nativeSource(files, mapSize, pixelSize), desired = new Map();
         let count = 0;
@@ -278,20 +308,38 @@ class D103CNNativeRoomMask {
                 desired.set(i, to);
             }
         }
+        /** @type {Array<{x:number,y:number,from:number,to:number,reopen:boolean,
+         * before:{obstacle:number,slam:number,contour:number,color:number},
+         * originalIslands?:Object<string,number>,roomFlags?:Object<string,boolean|null>}>} */
         const edits = [];
+        const color = image(files[names.color], s.width, s.height, 3);
         for (const [i, to] of desired) {
-            if (s.obstacle[i] === to && s.base[i] === to) {
+            const x = s.left + i % s.width, y = s.bottom - Math.floor(i / s.width);
+            const reopen = needsObservation(s, i) || !!fineOccupied?.(x, y);
+            if (!reopen && s.obstacle[i] === to && s.base[i] === to) {
                 continue;
             }
-            const x = s.left + i % s.width, y = s.bottom - Math.floor(i / s.width);
-            check(paintable(s, i), "unobserved, blocked or unassigned native cell at " + x + "," + y);
-            edits.push({x: x, y: y, from:s.base[i], to: to});
+            check(paintable(s, i), "unrecognized native cell encoding at " + x + "," + y);
+            edits.push({x:x, y:y, from:s.base[i], to:to, reopen:reopen,
+                before:{obstacle:s.obstacle[i], slam:s.slam[i], contour:s.contour[i], color:color.readUIntBE(3*i, 3)}});
         }
         check(edits.length, "those cells already belong to the selected room");
+        // Keep sufficient pre-edit topology to undo a stroke that joins two
+        // previously disconnected islands of the same factory room.
+        const {parts} = topology(s.base, s.width, s.ids);
+        edits[0].originalIslands = Object.fromEntries([...s.ids].filter(id => parts[id] > 1).map(id => [id, parts[id]]));
+        if (!edits.some(e => e.reopen)) {
+            // v36 marked manual room-ID transfers. Preserve missing flags too,
+            // because some factory tables predate is_user_edited.
+            edits[0].roomFlags = Object.fromEntries(s.rooms.RoomNeighborTable.map(row => {
+                check(row.is_user_edited === undefined || typeof row.is_user_edited === "boolean", "unknown room edit flag");
+                return [row.room_id, row.is_user_edited ?? null];
+            }));
+        }
         return edits;
     }
 
-    static prepare({files, mapSize, pixelSize, edits}) {
+    static prepare({files, mapSize, pixelSize, edits, restoring = false}) {
         check(Array.isArray(edits) && edits.length > 0 && edits.length <= 65536, "invalid number of room cells");
         const source = nativeSource(files, mapSize, pixelSize);
         const {width, height, rooms, ids, base, obstacle, slam, contour} = source;
@@ -299,7 +347,7 @@ class D103CNNativeRoomMask {
         check(Array.isArray(table) && table.length === ids.size, "invalid room table");
         const color = image(files[names.color], width, height, 3);
         const before = topology(base, width, ids);
-        const knownRows = new Set(), palette = new Map();
+        const knownRows = new Set(), palette = roomPalette(ids, obstacle, color);
         for (const row of table) {
             const neighbors = before.graph.get(row.room_id);
             check(neighbors && !knownRows.has(row.room_id) && Array.isArray(row.room_neighbor_id) &&
@@ -307,46 +355,68 @@ class D103CNNativeRoomMask {
                 row.room_neighbor_id.every(id => neighbors.has(id)), "native adjacency and label image disagree");
             knownRows.add(row.room_id);
         }
-        // Factory debug colour images use per-room colours with white text.
-        for (let p = 0; p < obstacle.length; p++) {
-            const id = obstacle[p], rgb = color.readUIntBE(3 * p, 3);
-            if (ids.has(id) && rgb !== 0xffffff) {
-                check(!palette.has(id) || palette.get(id) === rgb, "unknown room colour encoding");
-                palette.set(id, rgb);
-            }
-        }
         const touched = new Set(), changed = new Set();
-        for (const {x, y, from, to} of edits) {
+        let baseChanged = false, obstacleChanged = false, colorChanged = false, slamChanged = false, contourChanged = false;
+        for (const {x, y, from, to, before: original} of edits) {
             check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(from) && (ids.has(from) || from === 0) &&
-                ids.has(to) && from !== to, "use existing destination rooms");
+                ids.has(to) && (original || from !== to), "use existing destination rooms");
             const p = source.offset(x, y);
-            check(p >= 0, "paint extends beyond the selected floor");
-            check(!changed.has(p) && base[p] === from && obstacle[p] === from,
-                "cell changed, unsegmented or marked as an obstacle at " + x + "," + y);
-            check(slam[p] === 0 && contour[p] === 255,
-                "room includes an unobserved or blocked navigation cell at " + x + "," + y);
-            check(palette.has(to), "missing native room colour");
+            check(p >= 0 && !changed.has(p), "cell outside the selected floor or specified twice");
+            const old = original ?? {obstacle:from, slam:0, contour:255, color:palette.get(from)};
+            const filled = {obstacle:to, slam:0, contour:255, color:
+                original && from === to && original.obstacle === to ? original.color : palette.get(to)};
+            const expected = restoring ? filled : old, write = restoring ? old : filled;
+            check(paintable(source, p) && base[p] === (restoring ? to : from) && obstacle[p] === expected.obstacle &&
+                slam[p] === expected.slam && contour[p] === expected.contour &&
+                (!original || color.readUIntBE(3*p,3) === expected.color),
+            "native cell changed since this edit at " + x + "," + y);
+            check(Number.isSafeInteger(write.color), "missing native room colour");
             changed.add(p); touched.add(from); touched.add(to);
-            base[p] = to; obstacle[p] = to;
-            color.writeUIntBE(palette.get(to), 3 * p, 3);
+            const id = restoring ? from : to;
+            baseChanged ||= base[p] !== id;
+            obstacleChanged ||= obstacle[p] !== write.obstacle;
+            colorChanged ||= color.readUIntBE(3*p, 3) !== write.color;
+            base[p] = id;
+            obstacle[p] = write.obstacle;
+            slamChanged ||= slam[p] !== write.slam;
+            contourChanged ||= contour[p] !== write.contour;
+            slam[p] = write.slam;
+            contour[p] = write.contour;
+            color.writeUIntBE(write.color, 3*p, 3);
         }
         const after = topology(base, width, ids);
+        let tableChanged = false;
         for (const row of table) {
             const id = row.room_id, next = after.graph.get(id);
-            check(after.parts[id] && after.parts[id] <= before.parts[id], "stroke splits or removes room " + id);
+            const permitted = Math.max(before.parts[id], restoring ? edits[0].originalIslands?.[id] ?? 0 : 0);
+            check(after.parts[id] && after.parts[id] <= permitted, "stroke splits or removes room " + id);
             if (next.size !== row.room_neighbor_id.length || row.room_neighbor_id.some(n => !next.has(n))) {
                 row.room_neighbor_id = Array.from(next).sort((a, b) => a - b);
                 touched.add(id);
+                tableChanged = true;
             }
-            if (touched.has(id)) {
-                row.is_user_edited = true;
+            // A guessed occupancy correction must not pin this room. Native
+            // label-only transfers retain the earlier manual-edit behaviour.
+            if (touched.has(id) && (edits[0].roomFlags || !edits[0].before)) {
+                const flag = restoring && edits[0].roomFlags ? edits[0].roomFlags[id] : true;
+                if (row.is_user_edited !== (flag ?? undefined)) {
+                    check(!restoring || row.is_user_edited === true, "room edit flag changed since this stroke");
+                    if (flag === null) {
+                        delete row.is_user_edited;
+                    } else {
+                        row.is_user_edited = flag;
+                    }
+                    tableChanged = true;
+                }
             }
         }
         return {
-            [names.base]: encode(base, width, height, 1),
-            [names.obstacle]: encode(obstacle, width, height, 1),
-            [names.color]: encode(color, width, height, 3),
-            [names.rooms]: Buffer.from(JSON.stringify(rooms), "utf8")
+            [names.base]: baseChanged ? encode(base, width, height, 1) : files[names.base],
+            [names.obstacle]: obstacleChanged ? encode(obstacle, width, height, 1) : files[names.obstacle],
+            [names.color]: colorChanged ? encode(color, width, height, 3) : files[names.color],
+            ...(slamChanged ? {[names.slam]: encode(slam, width, height, 1)} : {}),
+            ...(contourChanged ? {[names.contour]: encode(contour, width, height, 1)} : {}),
+            [names.rooms]: tableChanged ? Buffer.from(JSON.stringify(rooms), "utf8") : files[names.rooms]
         };
     }
 }

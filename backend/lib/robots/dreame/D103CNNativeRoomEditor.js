@@ -1,5 +1,6 @@
 const Archive = require("./D103CNNativeArchive");
 const crypto = require("crypto");
+const Fine = require("./D103CNNativeFineGrid");
 const fs = require("fs");
 const http = require("http");
 const Info = require("./D103CNNativeRoomInfo");
@@ -54,17 +55,18 @@ function nativeFiles(floorId, names = Mask.files) {
     return Object.fromEntries(names.map(name => [name, file(dir + name)]));
 }
 
-function nativeRevision(files) {
+function nativeRevision(files, grid) {
     const hash = crypto.createHash("sha256");
     for (const name of Mask.viewFiles) {
         hash.update(name + ":" + digest(files[name]));
     }
-    return hash.digest("hex");
+    return hash.update(grid).digest("hex");
 }
 
 // Recovery replaces these directories, so a merely readable tar is insufficient:
 // reject a backup that would discard an unrecognized file from the selected floor.
-function exactSnapshot(archive,id) {
+function exactSnapshot(archive,id, alternate = {}) {
+    const matches = (name, data) => archive.members.get(name)?.equals(data) || alternate[name] === digest(data);
     for (const [live,prefix] of [["/data/map/"+id,id+"/"],["/data/DivideMap/"+id,"divide/"+id+"/"],
         ["/data/DivideAI/ai_result/"+id,"ai/"+id+"/"]]) {
         const names = [...archive.members.keys()].filter(n => n.startsWith(prefix));
@@ -73,10 +75,17 @@ function exactSnapshot(archive,id) {
             continue;
         }
         const entries = fs.readdirSync(live);
-        check(entries.length === names.length && entries.every(n => archive.members.get(prefix+n)?.equals(file(live+"/"+n))),
-            "Stock backup is incomplete or this floor just changed. No changes applied.");
+        check(entries.length === names.length && entries.every(n => matches(prefix+n,file(live+"/"+n))),
+            "Floor files changed outside this edit. Reload the floor; newer observations have been kept.");
     }
-    check(archive.members.get(id+".dat2")?.equals(file("/data/ri/"+id+".dat2")), "Native RI changed after backup.");
+    check(matches(id+".dat2",file("/data/ri/"+id+".dat2")), "Native RI changed after backup.");
+}
+
+function rasterMatches(current, edits, original) {
+    return !!current.raster && edits.every(e => {
+        const expected = original ? (e.sdkBefore ?? (e.from ? e.from + 3 : 1)) : e.to + 3;
+        return current.raster[e.y*current.width+e.x] === expected;
+    });
 }
 
 class D103CNNativeRoomEditor {
@@ -153,7 +162,7 @@ class D103CNNativeRoomEditor {
         const {floorId,revision} = this.robot.mapEditor.describe(map);
         this.robot.mapEditor.requireRevision(map,floorId,revision);
         const files = nativeFiles(floorId,Mask.viewFiles);
-        return {floorId:floorId, revision:revision, nativeRevision:nativeRevision(files),
+        return {floorId:floorId, revision:revision, nativeRevision:nativeRevision(files,file("/data/map/"+floorId+"/fine_large.bin")),
             layers:Mask.editableLayers(files,map.size,map.pixelSize,map.layers)};
     }
 
@@ -172,10 +181,16 @@ class D103CNNativeRoomEditor {
         } else {
             check(this.record.phase !== "needs_recovery", "Recover the previous native edit before saving another.");
             editor.requireRevision(r.state.map, floor, body.revision);
-            const files = nativeFiles(floor,Mask.viewFiles);
-            check(nativeRevision(files) === body.nativeRevision, "The saved room grid has changed. Reload before painting.");
+            const files = nativeFiles(floor);
+            const grid = file("/data/map/"+floor+"/fine_large.bin");
+            check(nativeRevision(files,grid) === body.nativeRevision, "The saved room grid has changed. Reload before painting.");
             try {
-                edits = Mask.editsFromRuns(files,r.state.map.size,r.state.map.pixelSize,body.runs);
+                edits = Mask.editsFromRuns(files,r.state.map.size,r.state.map.pixelSize,body.runs,Fine.needsCheck(grid));
+                check(edits.length <= 8192, "Save up to 8192 modified cells at a time.");
+                for (const e of edits) {
+                    e.sdkBefore = editor.current.raster[e.y*editor.current.width+e.x];
+                }
+                Fine.capture(grid,edits);
             } catch (err) {
                 throw Object.assign(err,{status:409});
             }
@@ -202,12 +217,17 @@ class D103CNNativeRoomEditor {
                 this.releaseStage();
             }
             check(!fs.existsSync(RECOVER), "A stock recovery directory is already present. No map was replaced.");
-            let archive, bytes;
+            let archive, bytes, checkLive;
             const emergency = restoring && previous.phase === "needs_recovery";
             if (emergency) {
-                check(digest(file(grid)) === previous.gridHash, "The SLAM map changed since the backup; snapshot restore is disabled.");
                 bytes = file(backupName);
                 check(digest(bytes) === previous.backupHash, "The saved backup checksum does not match.");
+                archive = await Archive.read(bytes,id);
+                // A full snapshot may only replace original or applied members.
+                // New observations on any member require a fresh per-cell inverse.
+                const original = archive;
+                checkLive = () => exactSnapshot(original,id,previous.appliedSums ?? previous.stage?.sums);
+                op.originalGridHash = digest(archive.members.get(id + "/fine_large.bin"));
             } else {
                 const map = r.state.map;
                 const revision = restoring ? r.mapEditor.describe(map).revision : body.revision;
@@ -215,11 +235,12 @@ class D103CNNativeRoomEditor {
                 op.pixelSize = map.pixelSize;
                 op.editorIdentity = r.mapEditor.current.identity;
                 const live = nativeFiles(id);
+                const startingGrid = file(grid);
                 if (!restoring) {
-                    check(nativeRevision(live) === body.nativeRevision, "The saved room grid changed before backup.");
+                    check(nativeRevision(live,startingGrid) === body.nativeRevision, "The saved room grid changed before backup.");
                 }
-                const changes = restoring ? op.edits.map(e => ({...e, from:e.to, to:e.from})) : op.edits;
-                const replacements = Mask.prepare({files: live, mapSize: map.size, pixelSize: map.pixelSize, edits: changes});
+                const changes = op.edits;
+                const replacements = Mask.prepare({files: live, mapSize: map.size, pixelSize: map.pixelSize, edits: changes, restoring: restoring});
                 const space = fs.statfsSync("/data");
                 check(space.bavail * space.bsize > 8*1024*1024, "Free at least 8 MiB on /data for native map recovery.");
                 archive = await Archive.capture(id, async () => {
@@ -234,26 +255,33 @@ class D103CNNativeRoomEditor {
                 const riName = id + ".dat2";
                 const ri = archive.members.get(riName);
                 const updates = Object.fromEntries(Object.entries(replacements).map(([name,buf]) => [prefix+name,buf]));
-                updates[riName] = Info.prepare(ri, map.size, map.pixelSize, changes, replacements["room_neighbor_table_large.json"] ?? live["room_neighbor_table_large.json"]);
+                updates[riName] = Info.prepare(ri, map.size, map.pixelSize, changes,
+                    replacements["room_neighbor_table_large.json"] ?? live["room_neighbor_table_large.json"], restoring);
                 const storedGrid = archive.members.get(id + "/fine_large.bin");
-                op.gridHash = digest(storedGrid);
+                check(storedGrid.equals(startingGrid), "SLAM observations changed during the native backup.");
+                const revisedGrid = Fine.correct(storedGrid, changes, restoring);
+                if (!storedGrid.equals(revisedGrid)) {
+                    updates[id + "/fine_large.bin"] = revisedGrid;
+                }
+                op.originalGridHash = digest(restoring ? revisedGrid : storedGrid);
+                op.paintedGridHash = digest(restoring ? storedGrid : revisedGrid);
                 bytes = await Archive.repack(archive, updates);
-                exactSnapshot(archive,id);
+                const original = archive;
+                checkLive = () => exactSnapshot(original,id);
+                checkLive();
                 if (!restoring) {
                     op.backupHash = digest(archive.original);
                     persist(backupName, archive.original);
                 }
-                check(digest(file(backupName)) === op.backupHash && digest(file(grid)) === op.gridHash,
-                    "Original map changed during backup.");
+                check(digest(file(backupName)) === op.backupHash, "Original backup checksum mismatch.");
                 await this.requireDock(id);
                 r.mapEditor.requireRevision(r.state.map, id, revision);
-                for (const name of Mask.files) {
-                    check(file("/data/DivideMap/"+id+"/"+name).equals(live[name]), "Native divider changed before restore.");
-                }
-                check(file("/data/ri/"+riName).equals(ri), "Room configuration changed during backup. Reload and retry.");
             }
-            archive = await Archive.read(bytes,id);
+            if (!emergency) {
+                archive = await Archive.read(bytes,id);
+            }
             await this.requireDock(id);
+            checkLive();
             this.store(restoring ? "restoring" : "applying", "Waiting for the firmware to load and publish the room mask.");
             journaled = true;
             const frames = r.mapFramesParsed;
@@ -314,6 +342,9 @@ class D103CNNativeRoomEditor {
             check(!fs.existsSync(RECOVER), "Stock map recovery is already staged.");
             const url = "http://127.0.0.1:" + address.port + uri;
             this.record.stage = {sums: Object.fromEntries([...archive.members].map(([key,value]) => [key,digest(value)]))};
+            if (this.record.phase === "applying") {
+                this.record.appliedSums = this.record.stage.sums;
+            }
             this.store(this.record.phase, this.record.message);
             onSend();
             const ack = await this.command("set_properties", [{did:this.robot.deviceId, siid:6, piid:10,
@@ -377,14 +408,13 @@ class D103CNNativeRoomEditor {
             check(![4,5].includes(state[4]), "Stock firmware reports map recovery failed.");
             const current = r.mapEditor.current;
             if ([1,2].includes(state[4]) || r.mapFramesParsed <= frames || current?.floorId !== op.floorId ||
-                !current.raster || !op.edits.every(e => {
-                const id = restored ? e.from : e.to;
-                return current.raster[e.y*current.width+e.x] === (id ? id+3 : 1);
-            })) {
+                !rasterMatches(current,op.edits,restored)) {
                 continue;
             }
+            const grid = file("/data/map/"+op.floorId+"/fine_large.bin");
             if (Mask.matches(nativeFiles(op.floorId),op.size,op.pixelSize,op.edits,restored) &&
-                digest(file("/data/map/"+op.floorId+"/fine_large.bin")) === op.gridHash) {
+                digest(grid) === ((restored ? op.originalGridHash : op.paintedGridHash) ?? op.gridHash) &&
+                Fine.matches(grid,op.edits,restored)) {
                 return;
             }
         }
@@ -406,13 +436,14 @@ class D103CNNativeRoomEditor {
         try {
             const state = await this.stockState();
             if (state[4] !== 3 || r.mapEditor.current !== current ||
-                JSON.parse(file("/data/ri/config.json2").toString()).curr_id !== op.floorId ||
-                digest(file("/data/map/"+op.floorId+"/fine_large.bin")) !== op.gridHash) {
+                JSON.parse(file("/data/ri/config.json2").toString()).curr_id !== op.floorId) {
                 return;
             }
             const files = nativeFiles(op.floorId);
+            const grid = file("/data/map/"+op.floorId+"/fine_large.bin"), gridHash = digest(grid);
             for (const original of [false,true]) {
-                if (op.edits.every(e => current.raster[e.y*current.width+e.x] === 3+(original ? e.from : e.to)) &&
+                if (gridHash === ((original ? op.originalGridHash : op.paintedGridHash) ?? op.gridHash) &&
+                    rasterMatches(current,op.edits,original) && Fine.matches(grid,op.edits,original) &&
                     Mask.matches(files,op.size,op.pixelSize,op.edits,original)) {
                     r.mapEditor.inheritRestoredFloor(r.state.map,op.editorIdentity);
                     this.store(original ? "restored" : "confirmed", original ?

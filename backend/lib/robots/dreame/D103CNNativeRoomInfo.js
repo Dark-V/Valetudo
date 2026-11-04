@@ -122,11 +122,12 @@ function offsetFor(header, mapSize, pixelSize, x, y) {
  * @param {Buffer} riBuffer
  * @param {{x:number,y:number}} mapSize
  * @param {number} pixelSize
- * @param {Array<{x:number,y:number,from:number,to:number}>} edits
+ * @param {Array<{x:number,y:number,from:number,to:number,before?:{obstacle:number},ri?:number[]}>} edits
  * @param {Buffer} newNeighborTableBuffer
+ * @param {boolean} [restoring]
  * @returns {Buffer}
  */
-function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer) {
+function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer, restoring = false) {
     check(Buffer.isBuffer(riBuffer) && riBuffer.length <= 8 * 1024 * 1024, "invalid RI size");
     check(pixelSize === 5 && mapSize?.x === 6554 && mapSize?.y === 6554, "unknown SDK coordinate frame");
     check(Array.isArray(edits) && edits.length > 0 && edits.length <= 65536, "invalid cell batch");
@@ -148,31 +149,51 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer) {
             "saved room-neighbor copies disagree");
     }
     const seen = new Set();
-    for (const {x, y, from, to} of edits) {
+    for (const edit of edits) {
+        const {x, y, from, to} = edit;
         check(Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < Math.ceil(mapSize.x/pixelSize) &&
-            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && topology.has(from) && topology.has(to) && from !== to,
+            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && (topology.has(from) || (from === 0 && edit.before)) && topology.has(to),
         "invalid room-cell transition");
         const offset = offsetFor(inner.header, mapSize, pixelSize, x, y);
         check(offset >= 27 && !seen.has(offset), "cell outside saved room image or specified twice");
         seen.add(offset);
         const byte = inner.binary[offset];
-        check((byte & 128) === 0 && (byte & 63) === from, "saved room differs or cell is a wall");
-        inner.binary[offset] = (byte & 64) | to;
-
-        // Some RI files contain an unrelated/unaligned live scan around the
-        // selected saved map. Never paint that other coordinate frame.
-        if (sameFloor) {
-            const live = offsetFor(outer.header, mapSize, pixelSize, x, y);
-            if (live >= 27) {
-                const sample = outer.binary[live];
-                const id = sample >> 2;
-                if (id > 0 && id < 62) {
-                    check(id === from, "live and saved room labels disagree");
-                    outer.binary[live] = (to << 2) | (sample & 3);
-                } else {
-                    check(sample === 0, "conflicting live wall or newly discovered floor");
-                }
+        // The RISM uses bit 7 for walls and bit 6 for carpet; the outer
+        // (live) frame uses a different code. On this firmware an observed
+        // wall can be 0xfc in the outer frame and 0x80|room in the RISM.
+        // Only project into an outer frame that identifies this same floor.
+        const live = sameFloor ? offsetFor(outer.header, mapSize, pixelSize, x, y) : -1;
+        const sample = live < 27 ? -1 : outer.binary[live];
+        if (!edit.before) {
+            // Existing v36 journals only ever changed observed room labels.
+            const src = restoring ? to : from, dest = restoring ? from : to;
+            check((byte & 191) === src, "saved room differs or cell is a wall");
+            inner.binary[offset] = (byte & 64) | dest;
+            if (sample >= 0 && sample !== 0) {
+                check((sample >> 2) === src, "live and saved room labels disagree");
+                outer.binary[live] = (dest << 2) | (sample & 3);
             }
+            continue;
+        }
+        if (!restoring) {
+            check((byte & 191) === edit.before.obstacle, "saved room and divider disagree at the brush mark");
+            const segment = sample >> 2;
+            check(sample < 0 || sample === 0 || segment === from || segment === 62 || segment === 63,
+                "another room occupies the live frame at this brush mark");
+            edit.ri = [byte, sample];
+        }
+        check(Array.isArray(edit.ri) && edit.ri.length === 2, "missing original saved cell");
+        const [oldSaved, oldLive] = edit.ri;
+        const paintedSaved = (oldSaved & 64) | to;
+        // Reproduce the regular frame's observed per-room encoding. For
+        // unsegmented space keep carpet if present, discard its obstacle type.
+        const paintedLive = oldLive < 0 ? -1 : (to << 2) |
+            ((oldLive >> 2) > 0 && (oldLive >> 2) < 62 ? oldLive & 3 : Number((oldLive & 3) === 3) * 3);
+        check(!restoring || (byte === paintedSaved && sample === paintedLive),
+            "the robot has rescanned this cell; its newer saved or live reading was kept");
+        inner.binary[offset] = restoring ? oldSaved : paintedSaved;
+        if (live >= 27) {
+            outer.binary[live] = restoring ? oldLive : paintedLive;
         }
     }
     const innerMeta = replaceMembers(inner.metadata, new Map([

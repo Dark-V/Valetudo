@@ -9,8 +9,8 @@ Keep the robot blocked from the Internet after granting root/SSH access.
 ## Source history
 
 The `d103cn` branch contains the port. `master` retains upstream history.
-PRs [1–18](https://github.com/Dark-V/Valetudo/pulls?q=is%3Apr+is%3Amerged)
-reconstruct the **actual backend source** from the saved v1–v18 pkg artifacts.
+PRs [1вЂ“18](https://github.com/Dark-V/Valetudo/pulls?q=is%3Apr+is%3Amerged)
+reconstruct the **actual backend source** from the saved v1вЂ“v18 pkg artifacts.
 Their original hashes and scope are in [history](../docs/d103cn/history/).
 Intermediate frontend TypeScript snapshots were not preserved; the complete
 current frontend is consolidated in v18. These PRs are a retrospective import,
@@ -25,14 +25,16 @@ not a claim that each intermediate source tree reproduces its original frontend.
   reported reliably by this firmware; [analysis and limits](DOORWAYS.md).
 - Open the editor from **Map Management**. When the floor has rooms, the brush
   is ready to edit their saved boundaries. Choose a room and paint adjacent
-  mapped floor. Save while the robot is docked. Once the robot confirms the
-  boundary, choose **Clean** for that room. The room keeps its stock ID.
-  Scroll to zoom around the pointer. Unseen space, obstacles and strokes that
-  would split a room into separate pieces cannot be saved.
-  The brush shows the saved divider raster. The room area includes all
-  labelled cells. Hatching identifies cells that the saved occupancy and
-  obstacle masks do not confirm as editable floor. A separate grid revision
-  protects an open draft if the robot saves a new segmentation.
+  cells, including previously occupied or unexplored ground inside the saved
+  map frame. A stroke can also reopen a cell that already has the right room
+  ID. Save while docked. After firmware confirmation, **Clean** starts that
+  room. Use the mouse wheel to zoom.
+  The brush changes the saved room and its 25 mm probability samples. Only
+  unknown or occupied samples under the stroke receive a weak free reading.
+  The robot can revise those readings on later scans. Physical barriers and
+  virtual restrictions still apply. A stroke must keep rooms connected.
+  Undo checks the edited cells against their saved values and refuses to
+  overwrite a newer observation. A single save may change up to 8,192 cells.
 - Draw a manual door between the jambs, mark it open, closed or unknown, then
   save. These positions and labels belong to the owner and survive new scans of
   the same floor. The door state records the owner's last selection.
