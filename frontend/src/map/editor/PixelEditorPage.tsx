@@ -29,7 +29,7 @@ async function load(): Promise<EditorData> {
 
 function errorMessage(err: unknown) {
     if (axios.isAxiosError(err)) {
-        if (err.response?.status === 409) {
+        if (err.response?.status === 409 && err.config?.method === "put") {
             return "This map changed. Your draft is still on screen. Reload the floor before applying a new draft.";
         }
         const data = err.response?.data;
@@ -188,7 +188,7 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
     const options = {pan: "Pan", brush: "Brush", rectangle: "Rectangle", door: "Add door", moveDoor: "Redraw selected door"};
     return <Stack spacing={1.5}>
         <Typography variant="h5">Pixel &amp; door editor · floor {state.floorId}</Typography>
-        <Typography variant="body2">Paint the map displayed by Valetudo. A new robot observation can replace painted cells.
+        <Typography variant="body2" sx={{"& a": {color: "primary.main"}}}>Paint the map displayed by Valetudo. A new robot observation can replace painted cells.
             Manual doors and their marked states stay until you edit them. For navigation, use{" "}
             <Link to="/options/map_management/segments">Edit navigation rooms</Link> or{" "}
             <Link to="/options/map_management/virtual_restrictions">Edit navigation walls</Link>.</Typography>
@@ -236,7 +236,7 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
                 {Math.max(view.w, view.h) < 95 &&
                     <rect width={width} height={height} fill="url(#editor-grid)" opacity={.55} pointerEvents="none"/>}
                 {rooms.map(({layer,value}) => <text key={value} x={layer.dimensions.x.avg} y={layer.dimensions.y.avg}
-                    fontSize={2.5} fill="white" stroke="#222" strokeWidth={.45} paintOrder="stroke" textAnchor="middle"
+                    fontSize={Math.max(2.5, view.h/36)} fill="white" stroke="#222" strokeWidth={Math.max(.45, view.h/240)} paintOrder="stroke" textAnchor="middle"
                 >{layer.metaData.name || "Room"} #{layer.metaData.segmentId}</text>)}
                 {map.entities.filter(e => e.type === RawMapEntityType.Door && e.metaData.source !== "user").map((e,i) =>
                     <line key={i} x1={e.points[0]/map.pixelSize} y1={e.points[1]/map.pixelSize}
@@ -300,14 +300,15 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
 }
 
 export default function PixelEditorPage() {
-    const query = useQuery({queryKey: ["d103_pixel_editor"], queryFn: load, staleTime: Infinity, retry: false,
-        refetchOnWindowFocus: false, refetchOnReconnect: false, gcTime: 0});
+    const query = useQuery({queryKey: ["d103_pixel_editor"], queryFn: load, staleTime: Infinity,
+        retry: (attempt, error) => attempt < 8 && axios.isAxiosError(error) && error.response?.status === 409,
+        retryDelay: 5000, refetchOnWindowFocus: false, refetchOnReconnect: false, gcTime: 0});
     const [generation, setGeneration] = React.useState(0);
     const reload = () => {
         void query.refetch().then(result => {if (!result.isError) {setGeneration(n => n+1);}});
     };
     return <PaperContainer>
-        {query.isPending && <Typography>Loading editor…</Typography>}
+        {query.isPending && <Typography>{query.failureCount ? "Waiting for the robot’s localized room map…" : "Loading editor…"}</Typography>}
         {query.isError && <Alert severity="error">{errorMessage(query.error)} <Button onClick={reload}>Retry</Button></Alert>}
         {query.data && <Editor key={generation} data={query.data} reload={reload} refreshing={query.isFetching}/>}
     </PaperContainer>;
