@@ -32,6 +32,9 @@ not a claim that each intermediate source tree reproduces its original frontend.
   To trim a room, select its name, choose **Eraser** next to **Brush**, drag
   over its cells and select **Save room**. Erased cells become unknown on the
   robot's saved map. They are not no-go zones: a later scan can map them again.
+  On the tested firmware, the route planner fills small enclosed holes (up to
+  100 map cells) surrounded by the same room. An erased hole can therefore
+  remain part of that room for routing. Use a restricted zone to exclude it.
   Erasing across a room boundary leaves the neighbouring room alone. Use
   **Undo** before saving, or **More → Undo saved room edit** after saving.
   The brush changes the saved room and its 25 mm probability samples. Only
