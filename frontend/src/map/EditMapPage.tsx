@@ -97,7 +97,9 @@ const EditMapPage = (props: {
                 <Box m={1}/>
                 <Button color="primary" variant="contained" onClick={() => {
                     void refetchMap();
-                    if (needsNativeGeometry) {void native.refetch();}
+                    if (needsNativeGeometry) {
+                        void native.refetch();
+                    }
                 }}>
                     Retry
                 </Button>

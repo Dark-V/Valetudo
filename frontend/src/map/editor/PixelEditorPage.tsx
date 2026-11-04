@@ -129,9 +129,9 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
             const toCM = (value: number, max: number) => Math.min(max-1, Math.floor((value+.5) * map.pixelSize));
             const door: Door = {id: g.tool === "moveDoor" && selected ? selected.id :
                 Array.from(crypto.getRandomValues(new Uint32Array(3))).join("-"),
-                state: g.tool === "moveDoor" && selected ? selected.state : doorState,
-                points: [toCM(g.start.x, map.size.x), toCM(g.start.y, map.size.y),
-                    toCM(target.x, map.size.x), toCM(target.y, map.size.y)]};
+            state: g.tool === "moveDoor" && selected ? selected.state : doorState,
+            points: [toCM(g.start.x, map.size.x), toCM(g.start.y, map.size.y),
+                toCM(target.x, map.size.x), toCM(target.y, map.size.y)]};
             append({doors: [...doors.filter(d => d.id !== door.id), door]});
             setPicked(door.id);
         }
@@ -190,8 +190,8 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
         <Typography variant="h5">Pixel &amp; door editor · floor {state.floorId}</Typography>
         <Typography variant="body2" sx={{"& a": {color: "primary.main"}}}>Paint the map displayed by Valetudo. A new robot observation can replace painted cells.
             Manual doors and their marked states stay until you edit them. For navigation, use{" "}
-            <Link to="/options/map_management/segments">Edit navigation rooms</Link> or{" "}
-            <Link to="/options/map_management/virtual_restrictions">Edit navigation walls</Link>.</Typography>
+        <Link to="/options/map_management/segments">Edit navigation rooms</Link> or{" "}
+        <Link to="/options/map_management/virtual_restrictions">Edit navigation walls</Link>.</Typography>
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
             <TextField select size="small" label="Tool" value={tool} disabled={busy}
                 onChange={e => setTool(e.target.value as Tool)} sx={{minWidth: 125}}>
@@ -216,9 +216,9 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
             tool === "brush" ? "Tap to paint one brush mark or drag to trace a boundary." :
                 tool === "rectangle" ? "Drag between opposite corners to paint a filled rectangle." :
                     "Drag between the two door jambs to set its position and width."} One cell = {map.pixelSize} cm.
-            {(tool === "brush" || tool === "rectangle") && room &&
+        {(tool === "brush" || tool === "rectangle") && room &&
                 ` Saved room area: ${(room.dimensions.pixelCount * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
-            {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
+        {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
         <Box sx={{backgroundColor: "#101317", border: "1px solid #596069", borderRadius: 1}}>
             <svg role="img" aria-label="Editable floor map" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -264,8 +264,11 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
         </Box>
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
             <TextField select size="small" label="Manual door" value={selected?.id ?? ""} disabled={busy}
-                onChange={e => {setPicked(e.target.value); const item = doors.find(d => d.id === e.target.value);
-                    if (item) {setDoorState(item.state);}
+                onChange={e => {
+                    setPicked(e.target.value); const item = doors.find(d => d.id === e.target.value);
+                    if (item) {
+                        setDoorState(item.state);
+                    }
                 }} sx={{minWidth: 150}}>
                 <MenuItem value="">None</MenuItem>
                 {doors.map(d => <MenuItem key={d.id} value={d.id}>({d.points[0]}, {d.points[1]}) · {d.state}</MenuItem>)}
@@ -288,10 +291,16 @@ function Editor({data: {map, state}, reload, refreshing}: {data: EditorData; rel
         {warning && <Alert severity="warning">{warning}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
             <Button variant="contained" disabled={busy || !edits.length} onClick={save}>Save edits</Button>
-            <Button disabled={busy || !edits.length} onClick={() => {setFuture([edits[edits.length-1], ...future]);
-                setEdits(edits.slice(0,-1));}}>Undo</Button>
-            <Button disabled={busy || !future.length} onClick={() => {setEdits([...edits, future[0]]); setFuture(future.slice(1));}}>Redo</Button>
-            <Button disabled={busy || !edits.length} onClick={() => {setEdits([]); setFuture([]); setWarning("");}}>Discard draft</Button>
+            <Button disabled={busy || !edits.length} onClick={() => {
+                setFuture([edits[edits.length-1], ...future]);
+                setEdits(edits.slice(0,-1));
+            }}>Undo</Button>
+            <Button disabled={busy || !future.length} onClick={() => {
+                setEdits([...edits, future[0]]); setFuture(future.slice(1));
+            }}>Redo</Button>
+            <Button disabled={busy || !edits.length} onClick={() => {
+                setEdits([]); setFuture([]); setWarning("");
+            }}>Discard draft</Button>
             <Button disabled={busy} onClick={() => edits.length ? setConfirmReload(true) : reload()}>Reload floor</Button>
         </Stack>
         {confirmReload && <Alert severity="warning">Reload and discard the current draft?
@@ -305,7 +314,11 @@ export default function PixelEditorPage() {
         retryDelay: 5000, refetchOnWindowFocus: false, refetchOnReconnect: false, gcTime: 0});
     const [generation, setGeneration] = React.useState(0);
     const reload = () => {
-        void query.refetch().then(result => {if (!result.isError) {setGeneration(n => n+1);}});
+        void query.refetch().then(result => {
+            if (!result.isError) {
+                setGeneration(n => n+1);
+            }
+        });
     };
     return <PaperContainer>
         {query.isPending && <Typography>{query.failureCount ? "Waiting for the robot’s localized room map…" : "Loading editor…"}</Typography>}
