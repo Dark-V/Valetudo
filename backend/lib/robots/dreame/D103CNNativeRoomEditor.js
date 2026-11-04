@@ -49,37 +49,17 @@ function persist(name, bytes) {
     }
 }
 
-function desired(current, runs) {
-    check(Array.isArray(runs) && runs.length > 0 && runs.length <= 4096, "Choose a room and paint some cells.", 400);
-    const edits = new Map();
-    let count = 0;
-    for (const run of runs) {
-        check(Array.isArray(run) && run.length === 4, "Invalid room stroke", 400);
-        const [x,y,length,paint] = run;
-        check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(length) &&
-            x >= 0 && y >= 0 && length > 0 && x + length <= current.width && y < current.height &&
-            typeof paint === "string" && /^room:[1-9]\d?$/.test(paint), "A native stroke must select a room on this floor.", 400);
-        const to = Number(paint.slice(5));
-        count += length;
-        check(count <= 65536 && current.rooms.has(3 + to), "Invalid room or too many painted cells", 400);
-        for (let cx = x; cx < x+length; cx++) {
-            const key = y*current.width+cx, code = current.raster[key];
-            check(code > 3, "The stroke crosses an obstacle, unassigned floor, or an unscanned cell. Paint the existing mapped rooms.");
-            const from = code-3;
-            if (from !== to) {
-                edits.set(key, {x: cx, y: y, from: from, to: to});
-            } else {
-                edits.delete(key);
-            }
-        }
-    }
-    check(edits.size > 0, "Those cells already belong to the selected room.");
-    return [...edits.values()];
+function nativeFiles(floorId, names = Mask.files) {
+    const dir = "/data/DivideMap/" + floorId + "/";
+    return Object.fromEntries(names.map(name => [name, file(dir + name)]));
 }
 
-function nativeFiles(floorId) {
-    const dir = "/data/DivideMap/" + floorId + "/";
-    return Object.fromEntries(Mask.files.map(name => [name, file(dir + name)]));
+function nativeRevision(files) {
+    const hash = crypto.createHash("sha256");
+    for (const name of Mask.viewFiles) {
+        hash.update(name + ":" + digest(files[name]));
+    }
+    return hash.digest("hex");
 }
 
 // Recovery replaces these directories, so a merely readable tar is insufficient:
@@ -168,6 +148,15 @@ class D103CNNativeRoomEditor {
         this.record = record;
     }
 
+    layers() {
+        const map = this.robot.state.map;
+        const {floorId,revision} = this.robot.mapEditor.describe(map);
+        this.robot.mapEditor.requireRevision(map,floorId,revision);
+        const files = nativeFiles(floorId,Mask.viewFiles);
+        return {floorId:floorId, revision:revision, nativeRevision:nativeRevision(files),
+            layers:Mask.editableLayers(files,map.size,map.pixelSize,map.layers)};
+    }
+
     start(body, restore) {
         const r = this.robot, editor = r.mapEditor;
         check(!this.working, "A native map operation is already running.");
@@ -183,7 +172,13 @@ class D103CNNativeRoomEditor {
         } else {
             check(this.record.phase !== "needs_recovery", "Recover the previous native edit before saving another.");
             editor.requireRevision(r.state.map, floor, body.revision);
-            edits = desired(editor.current, body.runs);
+            const files = nativeFiles(floor,Mask.viewFiles);
+            check(nativeRevision(files) === body.nativeRevision, "The saved room grid has changed. Reload before painting.");
+            try {
+                edits = Mask.editsFromRuns(files,r.state.map.size,r.state.map.pixelSize,body.runs);
+            } catch (err) {
+                throw Object.assign(err,{status:409});
+            }
         }
         this.working = true;
         const op = restore ? previous.operationId : crypto.randomUUID();
@@ -220,6 +215,9 @@ class D103CNNativeRoomEditor {
                 op.pixelSize = map.pixelSize;
                 op.editorIdentity = r.mapEditor.current.identity;
                 const live = nativeFiles(id);
+                if (!restoring) {
+                    check(nativeRevision(live) === body.nativeRevision, "The saved room grid changed before backup.");
+                }
                 const changes = restoring ? op.edits.map(e => ({...e, from:e.to, to:e.from})) : op.edits;
                 const replacements = Mask.prepare({files: live, mapSize: map.size, pixelSize: map.pixelSize, edits: changes});
                 const space = fs.statfsSync("/data");

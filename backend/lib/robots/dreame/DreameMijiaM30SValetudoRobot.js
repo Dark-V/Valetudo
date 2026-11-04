@@ -626,6 +626,13 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             void this.nativeRooms.reconcile();
             res.json(this.nativeRooms.status());
         });
+        app.get(route + "/rooms/layers", (req,res) => {
+            try {
+                res.json(this.nativeRooms.layers());
+            } catch (err) {
+                res.status(err.status ?? 409).json({message:err.message});
+            }
+        });
         const changeRooms = (req,res) => {
             if (this.implConfig.allowControls !== true) {
                 return res.sendStatus(403);

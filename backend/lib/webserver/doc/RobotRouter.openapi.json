@@ -116,10 +116,11 @@
       "requestBody": {
         "required": true,
         "content": {"application/json": {"schema": {
-          "type": "object", "required": ["floorId", "revision", "runs"],
+          "type": "object", "required": ["floorId", "revision", "nativeRevision", "runs"],
           "properties": {
             "floorId": {"type": "integer", "minimum": 0, "maximum": 999999},
             "revision": {"type": "string"},
+            "nativeRevision": {"type": "string", "description": "Saved navigation raster revision returned by rooms/layers for this draft"},
             "runs": {"type": "array", "minItems": 1, "maxItems": 4096, "items": {
               "type": "array", "minItems": 4, "maxItems": 4, "items": {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": "^room:[1-9][0-9]?$"}]}
             }}
@@ -130,6 +131,23 @@
         "202": {"description": "Accepted for backup, apply and readback", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/D103CNNativeRoomOperation"}}}},
         "400": {"description": "Invalid room assignments"},
         "409": {"description": "The floor, revision, raster or operation state does not permit this change"}
+      }
+    }
+  },
+  "/api/v2/robot/state/map/editor/rooms/layers": {
+    "get": {
+      "tags": ["Robot"],
+      "summary": "Read the saved D103CN room divider raster for the native brush",
+      "description": "Each room includes its full labelled area and a nativePaintablePixels count of eligible floor cells. nativeUnavailableRuns contains [x, y, length] triples for labelled cells that may not be reassigned. Room writes must retain the nativeRevision from this response.",
+      "responses": {
+        "200": {"description": "Saved floor geometry and both draft revisions", "content": {"application/json": {"schema": {
+          "type": "object", "required": ["floorId", "revision", "nativeRevision", "layers"],
+          "properties": {
+            "floorId": {"type": "integer"}, "revision": {"type": "string"}, "nativeRevision": {"type": "string"},
+            "layers": {"type": "array", "items": {"$ref": "#/components/schemas/MapLayer"}}
+          }
+        }}}},
+        "409": {"description": "No stable, localized native floor is available"}
       }
     }
   },

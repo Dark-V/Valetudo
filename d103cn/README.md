@@ -29,6 +29,10 @@ not a claim that each intermediate source tree reproduces its original frontend.
   Wait for confirmation before starting room cleaning. The stock room ID stays
   the same. Paint across adjacent mapped free cells. The editor rejects unseen
   space, obstacle cells, and strokes that split a room into extra pieces.
+  The brush shows the saved divider raster. The room area includes all
+  labelled cells. Hatching identifies cells that the saved occupancy and
+  obstacle masks do not confirm as editable floor. A separate grid revision
+  protects an open draft if the robot saves a new segmentation.
 - Draw a manual door between the jambs, mark it open, closed or unknown, then
   save. These positions and labels belong to the owner and survive new scans of
   the same floor. The door state records the owner's last selection.
@@ -46,6 +50,12 @@ not a claim that each intermediate source tree reproduces its original frontend.
   those cells on a fresh backup. Keep `/data/.valetudo/room-recovery/` and
   `/data/.valetudo/map-editor/` in owner backups.
   Each floor can hold 65,536 painted cells and 128 manual doors.
+- Verified on firmware 4.5.6_1409 with the robot docked. A 5 cm boundary cell
+  changed rooms inside both the planner's active `segment_map` and its latest
+  segmentation input. Undo returned the cell and the three stock segmentation
+  images to their original values. Seventeen reference cells across seven
+  rooms kept their assignments. A separate 5 cm virtual-wall endpoint edit
+  was reported by the firmware and reverted. No cleaning run was started.
 - An unlocalized isolated-room scan is displayed in its own local coordinates.
   It is never overlaid on the saved apartment map or offered for room profiles.
   The standard pending-map dialog saves a new floor (`cw=5`) only when native

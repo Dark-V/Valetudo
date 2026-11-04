@@ -1,4 +1,5 @@
 const crc = require("crc");
+const MapLayer = require("../../entities/map/MapLayer");
 const zlib = require("zlib");
 
 // The factory divider reads 8-bit OpenCV PNGs. Refuse different encodings
@@ -123,6 +124,54 @@ function json(files, name) {
     return JSON.parse(file.toString("utf8"));
 }
 
+function nativeGeometry(files, mapSize, pixelSize) {
+    check(mapSize?.x === 6554 && mapSize?.y === 6554 && pixelSize === 5, "unsupported SDK geometry");
+    const roi = json(files, names.roi), width = roi.x_max - roi.x_min, height = roi.y_max - roi.y_min;
+    check(roi.width === 3600 && roi.height === 3600 &&
+        [roi.x_min, roi.x_max, roi.y_min, roi.y_max].every(v => Number.isInteger(v) && v >= 0 && v <= 3600) &&
+        width > 0 && height > 0 && width * height <= MAX_PIXELS, "unsupported native ROI");
+    // Native grid cell (1800,1800) corresponds to SDK cell (655,655).
+    const left = roi.x_min - 1145, bottom = 2455 - roi.y_min;
+    return {width: width, height: height, left: left, bottom: bottom, offset: function(x, y) {
+        const col = x - left, row = bottom - y;
+        return Number.isInteger(col) && Number.isInteger(row) && col >= 0 && col < width && row >= 0 && row < height ?
+            row * width + col : -1;
+    }};
+}
+
+function roomIdsFrom(rooms) {
+    const roomIds = rooms.RoomIdAndColorLookUpTable?.RoomIds;
+    check(Array.isArray(roomIds) && roomIds.length > 0 && roomIds.length <= 63 &&
+        roomIds.every(id => Number.isInteger(id) && id >= 1 && id <= 63), "invalid native rooms");
+    const ids = new Set(roomIds);
+    check(ids.size === roomIds.length, "duplicate native rooms");
+    return ids;
+}
+
+function nativeSource(files, mapSize, pixelSize) {
+    const geometry = nativeGeometry(files, mapSize, pixelSize);
+    const {width, height} = geometry;
+    const rooms = json(files, names.rooms), ids = roomIdsFrom(rooms);
+    return {...geometry, rooms: rooms, ids: ids,
+        base: image(files[names.base], width, height, 1), obstacle: image(files[names.obstacle], width, height, 1),
+        slam: image(files[names.slam], width, height, 1), contour: image(files[names.contour], width, height, 1)};
+}
+
+function paintable(source, i) {
+    return source.ids.has(source.base[i]) && source.base[i] === source.obstacle[i] &&
+        source.slam[i] === 0 && source.contour[i] === 255;
+}
+
+function appendUnavailable(runs, x, y) {
+    const i = runs.length - 3;
+    if (i >= 0 && runs[i + 1] === y && runs[i] + runs[i + 2] === x) {
+        runs[i + 2]++;
+        return false;
+    }
+    runs.push(x, y, 1);
+    return true;
+}
+
 /** Prepare replacements for an inactive native map transaction. This class
  * owns no files and never selects/reloads a floor or commands a cleaning run.
  * Caller must compare baselines and verify the planner readback separately.
@@ -137,35 +186,117 @@ class D103CNNativeRoomMask {
      * @param {boolean} [restored]
      */
     static matches(files, mapSize, pixelSize, edits, restored = false) {
-        check(mapSize?.x === 6554 && mapSize?.y === 6554 && pixelSize === 5, "unsupported SDK geometry");
         check(Array.isArray(edits) && edits.length && edits.length <= 65536, "invalid readback cells");
-        const roi = json(files, names.roi), width = roi.x_max - roi.x_min, height = roi.y_max - roi.y_min;
-        check(roi.height === 3600 && roi.width === 3600 && [roi.x_min, roi.x_max, roi.y_min, roi.y_max].every(
-            v => Number.isInteger(v) && v >= 0 && v <= 3600) && width > 0 && height > 0 && width * height <= MAX_PIXELS,
-        "unsupported native ROI");
+        const {width, height, offset} = nativeGeometry(files, mapSize, pixelSize);
         const base = image(files[names.base], width, height, 1), obstacle = image(files[names.obstacle], width, height, 1);
         return edits.every(({x, y, from, to}) => {
-            const col = x + 1145 - roi.x_min, row = 2455 - y - roi.y_min, target = restored ? from : to;
-            return Number.isInteger(x) && Number.isInteger(y) && col >= 0 && col < width && row >= 0 && row < height &&
-                base[row * width + col] === target && obstacle[row * width + col] === target;
+            const i = offset(x, y), target = restored ? from : to;
+            return i >= 0 && base[i] === target && obstacle[i] === target;
         });
     }
 
+    static editableLayers(files, mapSize, pixelSize, templateLayers) {
+        const s = nativeSource(files, mapSize, pixelSize);
+        const WALL = 64, FLOOR = 65;
+        const counts = new Uint32Array(66), labels = new Uint8Array(s.base.length);
+        for (let i = 0; i < labels.length; i++) {
+            // The saved free-room ID matches the RISM view. Keep its full area
+            // visible even when the raw SLAM grid cannot support repainting it.
+            const room = s.obstacle[i];
+            const blocked = (room & 128) || s.contour[i] === 0 || s.slam[i] === 99;
+            const floor = s.contour[i] === 255 && s.slam[i] === 0;
+            const code = s.ids.has(room) ? room : blocked ? WALL : floor ? FLOOR : 0;
+            labels[i] = code;
+            counts[code]++;
+        }
+        const groups = new Map();
+        for (let id = 1; id < counts.length; id++) {
+            if (counts[id]) {
+                // MapLayer consumes sorted x/y pairs. Allocate them outside the
+                // small V8 heap so a large floor does not exhaust the robot.
+                groups.set(id, {points: new Int32Array(counts[id] * 2), n: 0, eligible: 0, unavailable: []});
+            }
+        }
+        let runCount = 0;
+        for (let row = s.height - 1; row >= 0; row--) {
+            let last = 0;
+            for (let col = 0; col < s.width; col++) {
+                const i = row * s.width + col, code = labels[i];
+                if (code) {
+                    const group = groups.get(code), x = s.left + col, y = s.bottom - row;
+                    check(x >= 0 && x < Math.ceil(mapSize.x / pixelSize) && y >= 0 && y < Math.ceil(mapSize.y / pixelSize),
+                        "native floor extends outside the supported editor frame");
+                    group.points[group.n++] = x;
+                    group.points[group.n++] = y;
+                    if (code !== last) {
+                        runCount++;
+                    }
+                    if (s.ids.has(code)) {
+                        if (paintable(s, i)) {
+                            group.eligible++;
+                        } else if (appendUnavailable(group.unavailable, x, y)) {
+                            runCount++;
+                        }
+                    }
+                }
+                last = code;
+            }
+            check(runCount <= 150000, "native raster too fragmented to display");
+        }
+        return [...groups.entries()].map(([id, group]) => {
+            const type = id === WALL ? MapLayer.TYPE.WALL : id === FLOOR ? MapLayer.TYPE.FLOOR : MapLayer.TYPE.SEGMENT;
+            const metaData = {area:counts[id] * pixelSize * pixelSize};
+            if (type === MapLayer.TYPE.SEGMENT) {
+                // Only borrow the room name/material, never live geometry or masks.
+                const label = templateLayers?.find(l => l.type === type && Number(l.metaData.segmentId) === id)?.metaData;
+                Object.assign(metaData, {segmentId:String(id), name:label?.name, material:label?.material,
+                    nativePaintablePixels:group.eligible});
+                if (group.unavailable.length) {
+                    Object.assign(metaData, {nativeUnavailableRuns:group.unavailable});
+                }
+            }
+            return new MapLayer({type: type, pixels:group.points, metaData: metaData});
+        });
+    }
+
+    static editsFromRuns(files, mapSize, pixelSize, runs) {
+        check(Array.isArray(runs) && runs.length > 0 && runs.length <= 4096, "invalid room brush runs");
+        const s = nativeSource(files, mapSize, pixelSize), desired = new Map();
+        let count = 0;
+        for (const run of runs) {
+            check(Array.isArray(run) && run.length === 4, "invalid native room stroke");
+            const [x, y, n, paint] = run;
+            check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(n) && n > 0 &&
+                typeof paint === "string" && /^room:[1-9]\d?$/.test(paint) && x >= 0 && y >= 0 &&
+                x + n <= Math.ceil(mapSize.x / pixelSize) && y < Math.ceil(mapSize.y / pixelSize), "invalid native room stroke");
+            const to = Number(paint.slice(5));
+            count += n;
+            check(count <= 65536 && s.ids.has(to), "too many cells or invalid destination room");
+            for (let cx = x; cx < x + n; cx++) {
+                const i = s.offset(cx, y);
+                check(i >= 0, "outside scanned native floor at " + cx + "," + y);
+                desired.set(i, to);
+            }
+        }
+        const edits = [];
+        for (const [i, to] of desired) {
+            if (s.obstacle[i] === to && s.base[i] === to) {
+                continue;
+            }
+            const x = s.left + i % s.width, y = s.bottom - Math.floor(i / s.width);
+            check(paintable(s, i), "unobserved, blocked or unassigned native cell at " + x + "," + y);
+            edits.push({x: x, y: y, from:s.base[i], to: to});
+        }
+        check(edits.length, "those cells already belong to the selected room");
+        return edits;
+    }
+
     static prepare({files, mapSize, pixelSize, edits}) {
-        check(mapSize?.x === 6554 && mapSize?.y === 6554 && pixelSize === 5, "unsupported SDK geometry");
         check(Array.isArray(edits) && edits.length > 0 && edits.length <= 65536, "invalid number of room cells");
-        const roi = json(files, names.roi), rooms = json(files, names.rooms);
-        const width = roi.x_max - roi.x_min, height = roi.y_max - roi.y_min;
-        check(roi.width === 3600 && roi.height === 3600 &&
-            [roi.x_min, roi.x_max, roi.y_min, roi.y_max].every(v => Number.isInteger(v) && v >= 0 && v <= 3600) &&
-            width > 0 && height > 0 && width * height <= MAX_PIXELS, "unsupported native ROI");
-        const roomIds = rooms.RoomIdAndColorLookUpTable?.RoomIds;
-        check(Array.isArray(roomIds) && roomIds.length > 0 && roomIds.length <= 63 &&
-            roomIds.every(id => Number.isInteger(id) && id >= 1 && id <= 63), "invalid native rooms");
-        const ids = new Set(roomIds), table = rooms.RoomNeighborTable;
-        check(ids.size === roomIds.length && Array.isArray(table) && table.length === ids.size, "invalid room table");
-        const base = image(files[names.base], width, height, 1), obstacle = image(files[names.obstacle], width, height, 1);
-        const slam = image(files[names.slam], width, height, 1), contour = image(files[names.contour], width, height, 1);
+        const source = nativeSource(files, mapSize, pixelSize);
+        const {width, height, rooms, ids, base, obstacle, slam, contour} = source;
+        const table = rooms.RoomNeighborTable;
+        check(Array.isArray(table) && table.length === ids.size, "invalid room table");
         const color = image(files[names.color], width, height, 3);
         const before = topology(base, width, ids);
         const knownRows = new Set(), palette = new Map();
@@ -188,10 +319,8 @@ class D103CNNativeRoomMask {
         for (const {x, y, from, to} of edits) {
             check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(from) && (ids.has(from) || from === 0) &&
                 ids.has(to) && from !== to, "use existing destination rooms");
-            // Native cell (1800,1800) is SDK cell (655,655); native Y grows up.
-            const col = x + 1145 - roi.x_min, row = 2455 - y - roi.y_min;
-            check(col >= 0 && col < width && row >= 0 && row < height, "paint extends beyond the selected floor");
-            const p = row * width + col;
+            const p = source.offset(x, y);
+            check(p >= 0, "paint extends beyond the selected floor");
             check(!changed.has(p) && base[p] === from && obstacle[p] === from,
                 "cell changed, unsegmented or marked as an obstacle at " + x + "," + y);
             check(slam[p] === 0 && contour[p] === 255,
@@ -223,4 +352,5 @@ class D103CNNativeRoomMask {
 }
 
 D103CNNativeRoomMask.files = Object.values(names);
+D103CNNativeRoomMask.viewFiles = D103CNNativeRoomMask.files.filter(name => name !== names.color);
 module.exports = D103CNNativeRoomMask;

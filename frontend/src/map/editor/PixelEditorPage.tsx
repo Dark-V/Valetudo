@@ -16,6 +16,7 @@ type WallHandle = "start" | "end" | "body";
 type Gesture = {id: number; tool: Tool; start: Cell; last: Cell; cells: Set<number>;
     wall?: {index: number; original: Wall; handle: WallHandle}};
 type EditorData = {map: RawMapData; state: Snapshot};
+type NativeLayers = Pick<Snapshot,"floorId" | "revision"> & {layers: RawMapLayer[]; nativeRevision?: string};
 type RoomOperation = {available: boolean; phase: "idle" | "applying" | "confirmed" | "failed" | "restoring" | "restored" | "needs_recovery";
     floorId: number | null; roomIds: string[]; message: string; operationId: string | null; canRollback: boolean};
 const roomEndpoint = endpoint + "/rooms";
@@ -50,14 +51,14 @@ const linesFromRestrictions = (r: Restrictions): Wall[] => r.virtualWalls.map(({
 
 function errorMessage(err: unknown) {
     if (axios.isAxiosError(err)) {
-        if ((err.response?.status === 409 || err.response?.status === 412) && err.config?.method === "put") {
-            return "This map changed. Your draft is still on screen. Reload the floor before applying a new draft.";
-        }
         const data = err.response?.data;
         if (typeof data === "string" && data.length < 400) {
             return data;
         } else if (typeof data?.message === "string") {
             return data.message;
+        }
+        if (err.response?.status === 409 || err.response?.status === 412) {
+            return "This map changed. Reload the floor to get the current geometry.";
         }
     }
     return err instanceof Error ? err.message : "Unable to reach the map editor.";
@@ -75,6 +76,17 @@ function fitView(map: RawMapData): View {
     }
     return {x: x-5, y: y-5, w: Math.max(...layers.map(l => l.dimensions.x.max), ...points.map(p => p.x))-x+11,
         h: Math.max(...layers.map(l => l.dimensions.y.max), ...points.map(p => p.y))-y+11};
+}
+
+function unavailablePath(layers: RawMapLayer[]) {
+    const lines = [];
+    for (const layer of layers) {
+        const rle = layer.metaData.nativeUnavailableRuns ?? [];
+        for (let i = 0; i < rle.length; i += 3) {
+            lines.push(`M${rle[i]} ${rle[i+1]}h${rle[i+2]}v1h-${rle[i+2]}z`);
+        }
+    }
+    return lines.join("");
 }
 
 function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoomId}: {
@@ -118,20 +130,32 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     const walls = wallChange?.walls ?? savedWalls;
     const editingWalls = tool === "navigationWall" || !!wallChange;
     const nativeBrush = nativeTarget && (tool === "brush" || tool === "rectangle" || roomDraft);
-    const needsNativeLayers = (editingWalls || nativeBrush) && state.editedCells > 0;
-    const native = useQuery({queryKey: ["native_map_editor_backdrop",state.floorId,state.revision],
-        enabled: needsNativeLayers, staleTime: Infinity, gcTime: 0, retry: false,
+    const layerSource = nativeBrush ? roomEndpoint+"/layers" : editingWalls && state.editedCells > 0 ? endpoint+"/native" : null;
+    const [draftBasis, setDraftBasis] = React.useState<string>();
+    const [expiredBasis, setExpiredBasis] = React.useState(false);
+    const native = useQuery({queryKey: ["native_map_editor_backdrop",layerSource,state.floorId,state.revision],
+        enabled: !!layerSource, staleTime: Infinity, gcTime: 0, retry: false,
         queryFn: async () => {
-            const {data} = await valetudoAPI.get<Pick<Snapshot,"floorId" | "revision"> & {layers: RawMapLayer[]}>(endpoint+"/native");
+            const {data} = await valetudoAPI.get<NativeLayers>(layerSource!);
             if (state.floorId !== data.floorId || state.revision !== data.revision) {
-                throw new Error("The selected floor changed. Reload the map.");
+                throw new Error("The selected floor or map revision changed. Reload the floor.");
             }
-            return data.layers;
+            if (!Array.isArray(data.layers) || !data.layers.length ||
+                (nativeBrush && (typeof data.nativeRevision !== "string" || !data.nativeRevision.length ||
+                    !data.layers.some(l => l.type === "segment") ||
+                    data.layers.some(l => l.type === "segment" && (!Number.isSafeInteger(l.metaData.nativePaintablePixels) ||
+                        l.metaData.nativePaintablePixels! < 0 || l.metaData.nativePaintablePixels! > l.dimensions.pixelCount))))) {
+                throw new Error("The robot did not return a verified navigation raster. Reload the floor.");
+            }
+            return data;
         }});
-    const wallGeometryReady = !state.editedCells || !!native.data;
-    const drawingMap = React.useMemo(() => needsNativeLayers ?
-        {...map, layers: native.data ?? []} : map, [map,needsNativeLayers,native.data]);
+    const basis = native.data?.nativeRevision;
+    const mapGeometryReady = (!layerSource || (!!native.data && !native.isError)) &&
+        (!nativeBrush || (!expiredBasis && (!roomDraft || basis === draftBasis)));
+    const drawingMap = React.useMemo(() => layerSource ?
+        {...map, layers: mapGeometryReady ? native.data?.layers ?? [] : []} : map, [map,layerSource,mapGeometryReady,native.data]);
     const paths = React.useMemo(() => layerPaths(drawingMap), [drawingMap]);
+    const unavailable = React.useMemo(() => nativeBrush ? unavailablePath(drawingMap.layers) : "", [drawingMap,nativeBrush]);
     const {data: robotStatus} = useRobotStatusQuery();
     const doors = latestDoors(edits, state.doors);
     const selected = doors.find(d => d.id === picked);
@@ -186,7 +210,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         }
     }
     async function cleanSavedRoom() {
-        if (!roomVerified || !roomId || edits.length || busy) {
+        if (!roomVerified || !nativeBrush || !mapGeometryReady || !roomId || edits.length || busy) {
             return;
         }
         setSaving(true); setWarning("");
@@ -238,6 +262,9 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 runs = rectRuns(g.start, target, paint);
             }
             if (finish) {
+                if (nativeTarget && !roomDraft) {
+                    setDraftBasis(basis);
+                }
                 append({runs: runs, nativeRoom: nativeTarget});
             } else {
                 setPreview(runs);
@@ -300,8 +327,8 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         }
         if (phase === "start") {
             if (e.button !== 0 || gesture.current || (tool === "moveDoor" && !selected) ||
-                (tool === "navigationWall" && (!wallGeometryReady || wallWritePendingReadback)) ||
-                (nativeBrush && (!wallGeometryReady || otherDraft)) ||
+                (tool === "navigationWall" && (!mapGeometryReady || wallWritePendingReadback)) ||
+                (nativeBrush && (!mapGeometryReady || otherDraft)) ||
                 (tool !== "pan" && (p.x < 0 || p.x >= width || p.y < 0 || p.y >= height))) {
                 return;
             }
@@ -370,10 +397,11 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 throw new Error("Too many separate areas for one save. Undo the last stroke and save in smaller batches.");
             }
             if (roomDraft) {
-                if (!roomOp?.available || !runs.length || edits.some(e => !("runs" in e) || !e.nativeRoom)) {
+                if (!roomOp?.available || !mapGeometryReady || !draftBasis || basis !== draftBasis ||
+                    !runs.length || edits.some(e => !("runs" in e) || !e.nativeRoom)) {
                     throw new Error("Cannot apply this draft to a native room.");
                 }
-                const {data} = await valetudoAPI.put<RoomOperation>(roomEndpoint,payload);
+                const {data} = await valetudoAPI.put<RoomOperation>(roomEndpoint,{...payload,nativeRevision:draftBasis});
                 trackOperation(data);
                 return;
             }
@@ -383,6 +411,16 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             setWarning(errorMessage(err));
             if (roomDraft) {
                 void roomOpQuery.refetch();
+                if (axios.isAxiosError(err) && [409,412].includes(err.response?.status ?? 0)) {
+                    // Keep the rejected stroke on its original basis. A fresh hash may never be silently substituted.
+                    try {
+                        const {data} = await valetudoAPI.get<NativeLayers>(roomEndpoint+"/layers");
+                        setExpiredBasis(data.floorId !== state.floorId || data.revision !== state.revision ||
+                            data.nativeRevision !== draftBasis);
+                    } catch {
+                        setExpiredBasis(true);
+                    }
+                }
             }
         } finally {
             setSaving(false);
@@ -455,7 +493,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             </TextField>}
             <Button size="small" aria-label="Zoom in" onClick={() => zoom(.65)}>Zoom +</Button>
             <Button size="small" aria-label="Zoom out" onClick={() => zoom(1/.65)}>Zoom −</Button>
-            <Button size="small" onClick={() => setView(fitView(map))}>Fit</Button>
+            <Button size="small" disabled={!mapGeometryReady} onClick={() => setView(fitView(drawingMap))}>Fit</Button>
         </Stack>
         <Typography variant="caption">{tool === "navigationWall" ?
             "Drag on empty space to draw a barrier. Drag the red line to move it, or drag either endpoint to resize. Save while docked." :
@@ -464,13 +502,16 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                     tool === "rectangle" ? "Drag between opposite corners to paint a filled rectangle." :
                         "Drag between the two door jambs to set its position and width."} One cell = {map.pixelSize} cm.
         {(tool === "brush" || tool === "rectangle") && room &&
-                ` Saved room area: ${(room.dimensions.pixelCount * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
+                ` ${nativeBrush ? "Saved room area" : "Displayed room area"}: ${(room.dimensions.pixelCount * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
+        {nativeBrush && room?.metaData.nativePaintablePixels !== undefined &&
+                ` Confirmed editable floor: ${(room.metaData.nativePaintablePixels * map.pixelSize ** 2 / 10000).toFixed(2)} m².`}
         {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
-        {nativeBrush && <Typography variant="caption">Paint mapped floor into the chosen room. Save the room on the robot,
-            then use Clean after the firmware confirms the boundary. Display overlays do not change cleaning.</Typography>}
-        {nativeBrush && !wallGeometryReady && <Alert severity={native.isError ? "warning" : "info"}>
-            {native.isError ? "Native geometry changed. Reload this floor." : "Loading the native room boundaries…"}
+        {nativeBrush && <Typography variant="caption">Hatching marks saved room cells containing an obstacle or unconfirmed floor.
+            Paint confirmed floor into a room, save it on the robot, then choose Clean after firmware confirmation.</Typography>}
+        {nativeBrush && !mapGeometryReady && <Alert severity={native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ? "warning" : "info"}>
+            {native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ?
+                "Saved room geometry is unavailable or changed. Reload the floor before drawing." : "Loading the saved navigation area…"}
         </Alert>}
         <Box sx={{backgroundColor: "#101317", border: "1px solid #596069", borderRadius: 1}}>
             <svg ref={svg} role="img" aria-label="Editable floor map" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -480,11 +521,14 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 onPointerUp={e => pointer(e, "end")} onPointerCancel={clearGesture} onLostPointerCapture={clearGesture}>
                 <defs><pattern id="restore-native" width={2} height={2} patternUnits="userSpaceOnUse">
                     <rect width={2} height={2} fill="#4b355c"/><rect width={1} height={1} fill="#d5a3fc"/>
+                </pattern><pattern id="unavailable-native" width={2} height={2} patternUnits="userSpaceOnUse">
+                    <path d="M0 0L2 2M-1 1L1 3M1 -1L3 1" fill="none" stroke="#292732" strokeWidth={.65}/>
                 </pattern><pattern id="editor-grid" width={1} height={1} patternUnits="userSpaceOnUse">
                     <path d="M0 1V0H1" fill="none" stroke="#ddd" strokeWidth={.055}/>
                 </pattern></defs>
                 <g shapeRendering="crispEdges">{baseGeometry}{committedPaint}
                     {preview.length > 0 && <path d={runPath(preview)} fill={paintColor(paint)} opacity={.85}/>}</g>
+                {unavailable && <path d={unavailable} fill="url(#unavailable-native)" pointerEvents="none"/>}
                 {Math.max(view.w, view.h) < 95 &&
                     <rect width={width} height={height} fill="url(#editor-grid)" opacity={.55} pointerEvents="none"/>}
                 {rooms.map(({layer,value}) => <text key={value} x={layer.dimensions.x.avg} y={layer.dimensions.y.avg}
@@ -540,11 +584,11 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 <MenuItem value={-1}>None</MenuItem>
                 {walls.map((w,i) => <MenuItem key={i} value={i}>Wall {i+1} · {Math.round(Math.hypot(w[2]-w[0],w[3]-w[1]))} cm</MenuItem>)}
             </TextField>
-            <Button disabled={busy || !walls[selectedWall] || wallWritePendingReadback || !wallGeometryReady} onClick={() => {
+            <Button disabled={busy || !walls[selectedWall] || wallWritePendingReadback || !mapGeometryReady} onClick={() => {
                 append({walls:walls.filter((_,i) => i !== selectedWall)}); setSelectedWall(-1);
             }}>Remove selected wall</Button>
             {robotStatus?.value !== "docked" && <Typography variant="caption">Dock the robot to save its navigation walls.</Typography>}
-            {!wallGeometryReady && <Alert severity={native.isError ? "warning" : "info"}>
+            {!mapGeometryReady && <Alert severity={native.isError ? "warning" : "info"}>
                 {native.isError ? "Native room geometry changed. Reload the floor." : "Loading native navigation geometry…"}
             </Alert>}
         </Stack>}
@@ -582,7 +626,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             {roomOp?.message && <Alert severity={roomOp.phase === "needs_recovery" || roomOp.phase === "failed" ? "warning" : "info"}>
                 {roomOp.message}</Alert>}
             <Stack direction="row" gap={1}>
-                {roomId && <Button disabled={!roomVerified || busy || !!edits.length ||
+                {nativeBrush && roomId && <Button disabled={!roomVerified || !mapGeometryReady || busy || !!edits.length ||
                     (robotStatus?.value !== "docked" && robotStatus?.value !== "idle")}
                 onClick={cleanSavedRoom}>Clean {roomName}</Button>}
                 {roomOp?.canRollback && roomOp.floorId === state.floorId &&
@@ -603,8 +647,8 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         {warning && <Alert severity="warning">{warning}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
         <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} alignItems="center">
             <Button variant="contained" disabled={busy || !edits.length || wallWritePendingReadback ||
-                (roomDraft && (!roomOp?.available || roomOpQuery.isError || !wallGeometryReady)) ||
-                (!!wallChange && (!wallGeometryReady || robotStatus?.value !== "docked"))} onClick={save}>
+                (roomDraft && (!roomOp?.available || roomOpQuery.isError || !mapGeometryReady)) ||
+                (!!wallChange && (!mapGeometryReady || robotStatus?.value !== "docked"))} onClick={save}>
                 {wallChange ? "Save navigation walls to robot" : roomDraft ? "Save room on robot" : "Save edits"}</Button>
             <Button disabled={busy || !edits.length} onClick={() => {
                 setFuture([edits[edits.length-1], ...future]);

@@ -47,6 +47,8 @@ export interface RawMapLayerDimension {
 }
 
 export interface RawMapLayerMetaData {
+    nativePaintablePixels?: number;
+    nativeUnavailableRuns?: number[];
     carpetPixels?: number[];
     area: number;
     segmentId?: string;
