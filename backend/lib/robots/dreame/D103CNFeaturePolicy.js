@@ -2,7 +2,7 @@
 const READ_PROPERTIES = Object.freeze([
     [4, 12], [4, 26], [4, 27], [4, 28], [4, 33], [4, 36],
     [5, 1], [5, 2], [5, 3], [9, 1], [10, 1], [11, 2], [18, 1],
-    [4, 40], [12, 2], [12, 3], [12, 4]
+    [4, 40], [12, 2], [12, 3], [12, 4], [6, 7]
 ]);
 
 const segmentId = value => Number.isInteger(value) && value >= 1 && value <= 255;
@@ -73,6 +73,9 @@ function validMapEdit(inputs) {
         return false;
     }
     const p = jsonObject(inputs[0].value);
+    if (keysAre(p, ["cw"])) {
+        return [0, 5].includes(p.cw);
+    }
     if (keysAre(p, ["cpt"]) && keysAre(p.cpt, ["addcpt", "nocpt"])) {
         return [p.cpt.addcpt, p.cpt.nocpt].every((rows, kind) => Array.isArray(rows) && rows.length <= 20 &&
             rows.every((row, i) => Array.isArray(row) &&

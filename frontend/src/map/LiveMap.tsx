@@ -171,6 +171,10 @@ class LiveMap extends BaseMap<LiveMapProps, LiveMapState> {
         const PointActions = this.state.mode === "spot" ? SpotActions : GoToActions;
         return (
             <MapContainer style={{overflow: "hidden"}}>
+                {this.props.rawMap.metaData.unlocalizedScan === true && <Alert severity="info"
+                    sx={{position: "absolute", top: 8, left: 8, right: 8, zIndex: 2, pointerEvents: "none"}}>
+                    Current local scan. It is not aligned with the saved floor map.
+                </Alert>}
                 {this.props.rawMap.metaData.savedMapSnapshot === true && <Alert severity="info"
                     sx={{position: "absolute", top: 8, left: 8, right: 8, zIndex: 2, pointerEvents: "none"}}>
                     {this.props.rawMap.metaData.relocalizationRequired === true ?

@@ -17,6 +17,7 @@ const fs = require("fs");
 const Logger = require("../../Logger");
 const MiioSocket = require("../../miio/MiioSocket");
 const MiioValetudoRobot = require("../MiioValetudoRobot");
+const PendingMapChangeValetudoEvent = require("../../valetudo_events/events/PendingMapChangeValetudoEvent");
 const QuirksCapability = require("../../core/capabilities/QuirksCapability");
 const registerFeatureCapabilities = require("./D103CNFeatureCapabilities");
 const ValetudoRobotError = require("../../entities/core/ValetudoRobotError");
@@ -537,7 +538,11 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         const raw = D103.decodeMapEnvelope(data, {iv: this.implConfig.mapIv ?? D103PublicProfile.publicMapIv});
         const parsed = await D103CNMapDecoder.PARSE(raw);
         if (parsed) {
-            if (parsed.metaData.savedMapSnapshot !== true) {
+            if (parsed.metaData.dreamePendingMapChange === true &&
+                this.state.map.metaData.dreamePendingMapChange !== true) {
+                this.valetudoEventStore.raise(new PendingMapChangeValetudoEvent({}));
+            }
+            if (parsed.metaData.savedMapSnapshot !== true && parsed.metaData.unlocalizedScan !== true) {
                 parsed.metaData.source = "D103CN live SDK map";
             }
             this.state.map = parsed;

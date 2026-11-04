@@ -20,6 +20,11 @@ not a claim that each intermediate source tree reproduces its original frontend.
 
 - Native live maps: rooms, robot position, station, travelled path; standard
   Dreame map coordinates and Valetudo entities.
+- An unlocalized isolated-room scan is displayed in its own local coordinates.
+  It is never overlaid on the saved apartment map or offered for room profiles.
+  The standard pending-map dialog saves a new floor (`cw=5`) only when native
+  multi-floor maps are enabled; it does not use the overwrite choice (`cw=1`).
+  Actual acceptance of a new isolated-room map remains hardware-unverified.
 - Native room/zone commands, four cleaning modes, mop extension, careful
   navigation, carpet settings, maintenance and restrictions are exposed.
 - Native spot cleaning was physically tested and confirmed by the owner.
