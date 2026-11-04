@@ -8,6 +8,7 @@ const D103CNDoorways = require("./D103CNDoorways");
 const D103CNHighResolutionManualControlCapability = require("./capabilities/D103CNHighResolutionManualControlCapability");
 const D103CNMapDecoder = require("./D103CNMapDecoder");
 const D103CNMapEditor = require("./D103CNMapEditor");
+const D103CNNativeRoomEditor = require("./D103CNNativeRoomEditor");
 const D103CNOperationModeControlCapability = require("./capabilities/D103CNOperationModeControlCapability");
 const D103CNSavedMap = require("./D103CNSavedMap");
 const D103PublicProfile = require("./D103CNPublicProfile.json");
@@ -55,6 +56,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         this.savedMapError = null;
         this.doorways = new D103CNDoorways();
         this.mapEditor = new D103CNMapEditor();
+        this.nativeRooms = new D103CNNativeRoomEditor(this);
         this.lastLiveMapAt = 0;
         this.pollInFlight = null;
         this.stationActionPending = false;
@@ -137,8 +139,15 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
      * @param {object} options
      */
     sendCommand(method, args = [], options = {}) {
-        if (!D103.commandAllowed(method, args, this.implConfig)) {
+        const roomRestore = this.implConfig.allowControls === true && args === this.nativeRooms?.instruction && args !== null;
+        if (!roomRestore && !D103.commandAllowed(method, args, this.implConfig)) {
             return Promise.reject(new Error("D103CN: operation disabled or outside the model-specific allowlist"));
+        }
+        if (!roomRestore && this.nativeRooms?.blocksNavigation &&
+            ((method === "action" && ((args.siid === 6 && args.aiid !== 1) ||
+                (args.aiid === 1 && [2,4].includes(args.siid)))) ||
+                (method === "set_properties" && Array.isArray(args) && args.some(p => p.siid === 4 && p.piid === 15)))) {
+            return Promise.reject(new Error("Finish or recover the native room edit before starting a task or editing the map."));
         }
         if (this.state.map.metaData.relocalizationRequired === true && method === "action" &&
             args.siid === 4 && args.aiid === 1 && args.in.some(p => p.piid === 1 && [18, 19, 20, 23].includes(p.value))) {
@@ -555,6 +564,7 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
             }
             this.state.map = parsed;
             this.mapFramesParsed++;
+            void this.nativeRooms.reconcile();
             this.lastLiveMapAt = Date.now();
             this.mapLastError = null;
             this.emitMapUpdated();
@@ -593,6 +603,10 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
                 } else if (req.method === "GET") {
                     res.json(this.mapEditor.describe(this.state.map));
                 } else {
+                    if (this.nativeRooms.blocksNavigation) {
+                        res.status(409).json({message: "Wait for native room editing or recovery to finish."});
+                        return;
+                    }
                     const data = this.mapEditor.update(this.state.map, req.body);
                     this.emitMapUpdated();
                     res.json(data);
@@ -608,6 +622,29 @@ class DreameMijiaM30SValetudoRobot extends MiioValetudoRobot {
         app.get(route, handle);
         app.get(route + "/native", handle);
         app.put(route, handle);
+        app.get(route + "/rooms", (req,res) => {
+            void this.nativeRooms.reconcile();
+            res.json(this.nativeRooms.status());
+        });
+        app.get(route + "/rooms/layers", (req,res) => {
+            try {
+                res.json(this.nativeRooms.layers());
+            } catch (err) {
+                res.status(err.status ?? 409).json({message:err.message});
+            }
+        });
+        const changeRooms = (req,res) => {
+            if (this.implConfig.allowControls !== true) {
+                return res.sendStatus(403);
+            }
+            try {
+                res.status(202).json(this.nativeRooms.start(req.body, req.method === "POST"));
+            } catch (err) {
+                res.status(err.status ?? 500).json({message: err.message});
+            }
+        };
+        app.put(route + "/rooms", changeRooms);
+        app.post(route + "/rooms/restore", changeRooms);
     }
     getModelDetails() {
         return {supportedAttachments: ["mop", "watertank"], supportedDockComponents: ["water_tank_clean", "water_tank_dirty", "dustbag"]};
