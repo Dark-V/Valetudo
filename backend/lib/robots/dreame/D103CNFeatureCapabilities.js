@@ -6,6 +6,7 @@ const D103CNMaintenanceReminderCapability = require("./capabilities/D103CNMainte
 const D103CNMapSegmentationCapability = require("./capabilities/D103CNMapSegmentationCapability");
 const D103CNMopDockCleanManualTriggerCapability = require("./capabilities/D103CNMopDockCleanManualTriggerCapability");
 const D103CNMopDockDryManualTriggerCapability = require("./capabilities/D103CNMopDockDryManualTriggerCapability");
+const D103CNPendingMapChangeHandlingCapability = require("./capabilities/D103CNPendingMapChangeHandlingCapability");
 const D103CNRoomProfilesCapability = require("./capabilities/D103CNRoomProfilesCapability");
 const D103CNSpotCleaningCapability = require("./capabilities/D103CNSpotCleaningCapability");
 const D103CNWifiConfigurationCapability = require("./capabilities/D103CNWifiConfigurationCapability");
@@ -26,6 +27,7 @@ function registerFeatures(robot) {
     robot.registerCapability(new D103CNWifiScanCapability({robot: robot}));
     robot.registerCapability(new D103CNSpotCleaningCapability({robot: robot}));
     robot.registerCapability(new D103CNGoToLocationCapability({robot: robot}));
+    robot.registerCapability(new D103CNPendingMapChangeHandlingCapability({robot: robot}));
     robot.registerCapability(new D103CNMopDockCleanManualTriggerCapability({robot: robot}));
     robot.registerCapability(new D103CNMopDockDryManualTriggerCapability({robot: robot}));
     robot.registerCapability(new D103CNAutoEmptyDockManualTriggerCapability({robot: robot}));

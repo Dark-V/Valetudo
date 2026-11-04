@@ -91,6 +91,7 @@ export interface RawMapDataMetaData {
     nonce: string;
     savedMapSnapshot?: boolean;
     relocalizationRequired?: boolean;
+    unlocalizedScan?: boolean;
     mapId?: string;
     savedAt?: string;
 }

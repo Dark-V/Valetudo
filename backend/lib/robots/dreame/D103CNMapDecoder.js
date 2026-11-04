@@ -17,6 +17,21 @@ class D103CNMapDecoder {
         } catch (_) {
             // Keep the upstream parser's normal malformed-metadata handling.
         }
+        if ((extra.ris === 1 && extra.iscleanlog !== true) || [5, 6].includes(extra.suw)) {
+            // An isolated room can be scanned/cleaned without localization on
+            // the saved floor. Keep its actual live geometry and relative pose.
+            const localExtra = {...extra, rism: undefined};
+            const local = await DreameMapParser.PARSE(Buffer.concat([
+                raw.subarray(0, 27 + width * height), Buffer.from(JSON.stringify(localExtra))
+            ]));
+            if (local) {
+                delete local.metaData.vendorMapId;
+                local.metaData = {...local.metaData, source: "D103CN local SDK scan; not aligned with saved map",
+                    unlocalizedScan: true, livePoseAvailable: true, relocalizationRequired: true,
+                    nativeSavedMapStatus: 1};
+            }
+            return local;
+        }
         if (extra.ris === 1 && typeof extra.rism === "string") {
             // ris=1 says the saved map is not applied to the current scan.
             // This firmware also sets iscleanlog on these live FDS frames.
