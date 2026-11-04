@@ -152,7 +152,8 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer, re
     for (const edit of edits) {
         const {x, y, from, to} = edit;
         check(Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < Math.ceil(mapSize.x/pixelSize) &&
-            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && (topology.has(from) || (from === 0 && edit.before)) && topology.has(to),
+            y >= 0 && y < Math.ceil(mapSize.y/pixelSize) && (topology.has(from) || (from === 0 && edit.before)) &&
+            (topology.has(to) || (to === 0 && topology.has(from) && edit.before)),
         "invalid room-cell transition");
         const offset = offsetFor(inner.header, mapSize, pixelSize, x, y);
         check(offset >= 27 && !seen.has(offset), "cell outside saved room image or specified twice");
@@ -184,13 +185,13 @@ function prepare(riBuffer, mapSize, pixelSize, edits, newNeighborTableBuffer, re
             // existing room in a current scan; leave gaps and sensor data alone.
             if (outer.json.iscleanlog !== true && segment > 0 && segment < 62) {
                 check(segment === from, "another room occupies the live frame at this brush mark");
-                writtenLive = (to << 2) | (sample & 3);
+                writtenLive = to === 0 ? 0 : (to << 2) | (sample & 3);
             }
             edit.ri = [byte, sample, writtenLive];
         }
         check(Array.isArray(edit.ri) && [2,3].includes(edit.ri.length), "missing original saved cell");
         const [oldSaved, oldLive] = edit.ri;
-        const paintedSaved = (oldSaved & 64) | to;
+        const paintedSaved = to === 0 ? 0 : (oldSaved & 64) | to;
         check(!restoring || byte === paintedSaved,
             "the saved room cell has changed since painting; its newer reading was kept");
         inner.binary[offset] = restoring ? oldSaved : paintedSaved;

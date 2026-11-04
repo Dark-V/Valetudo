@@ -29,6 +29,11 @@ not a claim that each intermediate source tree reproduces its original frontend.
   map frame. A stroke can also reopen a cell that already has the right room
   ID. Save while docked. After firmware confirmation, **Clean** starts that
   room. Use the mouse wheel to zoom.
+  To trim a room, select its name, choose **Eraser** next to **Brush**, drag
+  over its cells and select **Save room**. Erased cells become unknown on the
+  robot's saved map. They are not no-go zones: a later scan can map them again.
+  Erasing across a room boundary leaves the neighbouring room alone. Use
+  **Undo** before saving, or **More → Undo saved room edit** after saving.
   The brush changes the saved room and its 25 mm probability samples. Only
   unknown or occupied samples under the stroke receive a weak free reading.
   The robot can revise those readings on later scans. Physical barriers and

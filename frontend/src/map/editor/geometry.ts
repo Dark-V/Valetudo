@@ -6,7 +6,8 @@ export type Door = {id: string; state: "open" | "closed" | "unknown"; points: [n
 export type Wall = [number, number, number, number]; // endpoints in firmware map cm
 export type Snapshot = {floorId: number; revision: string; pixelSize: number; doors: Door[];
     rooms: Array<{id: string; name: string}>; editedCells: number};
-export type Edit = {runs: Run[]; nativeRoom: boolean} | {doors: Door[]} | {walls: Wall[]};
+export type Edit = {runs: Run[]; nativeRoom: boolean; paint: string; tool: "brush" | "eraser" | "rectangle"} |
+    {doors: Door[]} | {walls: Wall[]};
 export const maxCells = 65536;
 export const manualDoorColor = "#66daf5";
 const roomColors = ["#167d80", "#829f3d", "#c27d36", "#926baf", "#527ab7", "#b05762", "#479695"];
@@ -63,21 +64,22 @@ export function rectRuns(a: Cell, b: Cell, paint: string): Run[] {
     return Array.from({length: height}, (_, k) => [left, top+k, width, paint]);
 }
 
-// Normalize overlapping paint operations so each cell is sent only once.
-export function mergedRuns(edits: Edit[], width: number): Run[] {
-    const cells = new Map<number, string>();
-    for (const edit of edits) {
-        if ("runs" in edit) {
-            for (const [x,y,n,value] of edit.runs) {
-                for (let i=0; i<n; i++) {
-                    cells.set(y*width+x+i, value);
-                }
-                if (cells.size > maxCells) {
-                    throw new Error("Save at most 65,536 cells at a time.");
-                }
+// Erasing a newly painted extension reveals its original cell, including another
+// room or a wall. Only erase cells belonging to the selected room in the saved map.
+export function applyRuns(cells: Map<number,string>, runs: Run[], width: number, savedRooms: Map<number,string>) {
+    for (const [x,y,n,value] of runs) {
+        const erasedRoom = value.startsWith("erase:") ? "room:" + value.slice(6) : undefined;
+        for (let k = y*width+x; k < y*width+x+n; k++) {
+            if (erasedRoom && erasedRoom !== savedRooms.get(k)) {
+                cells.delete(k);
+            } else {
+                cells.set(k,value);
             }
         }
     }
+}
+
+export function mergedRuns(cells: Map<number,string>, width: number): Run[] {
     const result: Run[] = [];
     Array.from(cells.keys()).sort((a,b) => a-b).forEach(k => append(result, k%width, Math.floor(k/width), cells.get(k)!));
     return result;
@@ -119,6 +121,6 @@ export function layerPaths(map: RawMapData) {
                 append(runs, layer.pixels[i], layer.pixels[i+1], value);
             }
         }
-        return {value: value, path: runPath(runs), layer: layer};
+        return {value: value, path: runPath(runs), layer: layer, runs: runs};
     });
 }

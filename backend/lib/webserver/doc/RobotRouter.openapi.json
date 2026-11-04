@@ -112,7 +112,7 @@
     "put": {
       "tags": ["Robot"],
       "summary": "Apply room assignments to the native floor",
-      "description": "Each run is [xCell, yCell, length, room:<id>]. The target must already exist. Previously unknown or occupied cells inside the saved map frame can be reopened. The requested stroke can cover up to 65,536 cells and change at most 8,192 cells. Poll GET for confirmation from the firmware.",
+      "description": "Each run is [xCell, yCell, length, brush]. room:<id> assigns cells to an existing room and can reopen occupied or unknown cells. erase:<id> clears cells of the selected room to unknown in the saved navigation map; other rooms and no-go zones are unaffected. The requested stroke can cover up to 65,536 cells and change at most 8,192 cells. Poll GET for confirmation from the firmware.",
       "requestBody": {
         "required": true,
         "content": {"application/json": {"schema": {
@@ -122,7 +122,7 @@
             "revision": {"type": "string"},
             "nativeRevision": {"type": "string", "description": "Saved navigation raster revision returned by rooms/layers for this draft"},
             "runs": {"type": "array", "minItems": 1, "maxItems": 4096, "items": {
-              "type": "array", "minItems": 4, "maxItems": 4, "items": {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": "^room:[1-9][0-9]?$"}]}
+              "type": "array", "minItems": 4, "maxItems": 4, "items": {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": "^(room|erase):[1-9][0-9]?$"}]}
             }}
           }
         }}}

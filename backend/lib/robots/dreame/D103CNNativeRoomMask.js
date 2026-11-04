@@ -167,6 +167,15 @@ function needsObservation(source, i) {
     return source.slam[i] !== 0 || source.contour[i] !== 255 || (source.obstacle[i] & 128) !== 0;
 }
 
+function paintedCell(to, from, original, palette) {
+    // Stock unknown space: no label, unknown occupancy, gray contour, black diagnostic pixel.
+    if (to === 0) {
+        return {obstacle:0, slam:255, contour:180, color:0};
+    }
+    return {obstacle:to, slam:0, contour:255, color:
+        original && from === to && original.obstacle === to ? original.color : palette.get(to)};
+}
+
 function roomPalette(ids, obstacle, color) {
     const palette = new Map();
     // Factory debug colours are constant per free-room ID, apart from white text labels.
@@ -220,8 +229,9 @@ class D103CNNativeRoomMask {
                 return obstacle[i] === before.obstacle && slam[i] === before.slam && contour[i] === before.contour &&
                     color.readUIntBE(3*i, 3) === before.color;
             }
-            const rgb = from === to && before.obstacle === to ? before.color : palette.get(to);
-            return obstacle[i] === to && slam[i] === 0 && contour[i] === 255 && color.readUIntBE(3*i, 3) === rgb;
+            const filled = paintedCell(to, from, before, palette);
+            return obstacle[i] === filled.obstacle && slam[i] === filled.slam && contour[i] === filled.contour &&
+                color.readUIntBE(3*i, 3) === filled.color;
         });
     }
 
@@ -297,15 +307,26 @@ class D103CNNativeRoomMask {
             check(Array.isArray(run) && run.length === 4, "invalid native room stroke");
             const [x, y, n, paint] = run;
             check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(n) && n > 0 &&
-                typeof paint === "string" && /^room:[1-9]\d?$/.test(paint) && x >= 0 && y >= 0 &&
+                typeof paint === "string" && /^(room|erase):[1-9]\d?$/.test(paint) && x >= 0 && y >= 0 &&
                 x + n <= Math.ceil(mapSize.x / pixelSize) && y < Math.ceil(mapSize.y / pixelSize), "invalid native room stroke");
-            const to = Number(paint.slice(5));
+            const [tool, roomText] = paint.split(":");
+            const room = Number(roomText);
             count += n;
-            check(count <= 65536 && s.ids.has(to), "too many cells or invalid destination room");
+            check(count <= 65536 && s.ids.has(room), "too many cells or invalid selected room");
             for (let cx = x; cx < x + n; cx++) {
                 const i = s.offset(cx, y);
                 check(i >= 0, "outside scanned native floor at " + cx + "," + y);
-                desired.set(i, to);
+                if (tool === "room") {
+                    desired.set(i, room);
+                } else if ((desired.get(i) ?? s.base[i]) === room) {
+                    // Erasing a draft extension over another room or a wall
+                    // reveals that original cell. Never erase its underlying data.
+                    if (s.base[i] === room && (s.obstacle[i] & 127) === room) {
+                        desired.set(i, 0);
+                    } else {
+                        desired.delete(i);
+                    }
+                }
             }
         }
         /** @type {Array<{x:number,y:number,from:number,to:number,reopen:boolean,
@@ -315,7 +336,7 @@ class D103CNNativeRoomMask {
         const color = image(files[names.color], s.width, s.height, 3);
         for (const [i, to] of desired) {
             const x = s.left + i % s.width, y = s.bottom - Math.floor(i / s.width);
-            const reopen = needsObservation(s, i) || !!fineOccupied?.(x, y);
+            const reopen = to !== 0 && (needsObservation(s, i) || !!fineOccupied?.(x, y));
             if (!reopen && s.obstacle[i] === to && s.base[i] === to) {
                 continue;
             }
@@ -323,12 +344,12 @@ class D103CNNativeRoomMask {
             edits.push({x:x, y:y, from:s.base[i], to:to, reopen:reopen,
                 before:{obstacle:s.obstacle[i], slam:s.slam[i], contour:s.contour[i], color:color.readUIntBE(3*i, 3)}});
         }
-        check(edits.length, "those cells already belong to the selected room");
+        check(edits.length, "no selected room cells would change");
         // Keep sufficient pre-edit topology to undo a stroke that joins two
         // previously disconnected islands of the same factory room.
         const {parts} = topology(s.base, s.width, s.ids);
         edits[0].originalIslands = Object.fromEntries([...s.ids].filter(id => parts[id] > 1).map(id => [id, parts[id]]));
-        if (!edits.some(e => e.reopen)) {
+        if (!edits.some(e => e.reopen || e.to === 0)) {
             // v36 marked manual room-ID transfers. Preserve missing flags too,
             // because some factory tables predate is_user_edited.
             edits[0].roomFlags = Object.fromEntries(s.rooms.RoomNeighborTable.map(row => {
@@ -359,12 +380,12 @@ class D103CNNativeRoomMask {
         let baseChanged = false, obstacleChanged = false, colorChanged = false, slamChanged = false, contourChanged = false;
         for (const {x, y, from, to, before: original} of edits) {
             check(Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(from) && (ids.has(from) || from === 0) &&
-                ids.has(to) && (original || from !== to), "use existing destination rooms");
+                (ids.has(to) || (to === 0 && ids.has(from) && original)) &&
+                (original || from !== to), "use existing rooms");
             const p = source.offset(x, y);
             check(p >= 0 && !changed.has(p), "cell outside the selected floor or specified twice");
             const old = original ?? {obstacle:from, slam:0, contour:255, color:palette.get(from)};
-            const filled = {obstacle:to, slam:0, contour:255, color:
-                original && from === to && original.obstacle === to ? original.color : palette.get(to)};
+            const filled = paintedCell(to, from, original, palette);
             const expected = restoring ? filled : old, write = restoring ? old : filled;
             check(paintable(source, p) && base[p] === (restoring ? to : from) && obstacle[p] === expected.obstacle &&
                 slam[p] === expected.slam && contour[p] === expected.contour &&
