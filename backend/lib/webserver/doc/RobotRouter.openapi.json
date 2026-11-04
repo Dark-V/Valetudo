@@ -101,6 +101,74 @@
       }
     }
   },
+  "/api/v2/robot/state/map/editor/rooms": {
+    "get": {
+      "tags": ["Robot"],
+      "summary": "Read the current D103CN firmware room edit or recovery operation",
+      "responses": {
+        "200": {"description": "Last native operation and rollback availability", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/D103CNNativeRoomOperation"}}}}
+      }
+    },
+    "put": {
+      "tags": ["Robot"],
+      "summary": "Apply room assignments to the native floor",
+      "description": "Each run is [xCell, yCell, length, room:<id>]. The target must already exist. Only mapped traversable floor cells can be assigned. The complete request is limited to 65,536 cells. Poll GET for confirmation from the firmware.",
+      "requestBody": {
+        "required": true,
+        "content": {"application/json": {"schema": {
+          "type": "object", "required": ["floorId", "revision", "runs"],
+          "properties": {
+            "floorId": {"type": "integer", "minimum": 0, "maximum": 999999},
+            "revision": {"type": "string"},
+            "runs": {"type": "array", "minItems": 1, "maxItems": 4096, "items": {
+              "type": "array", "minItems": 4, "maxItems": 4, "items": {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": "^room:[1-9][0-9]?$"}]}
+            }}
+          }
+        }}}
+      },
+      "responses": {
+        "202": {"description": "Accepted for backup, apply and readback", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/D103CNNativeRoomOperation"}}}},
+        "400": {"description": "Invalid room assignments"},
+        "409": {"description": "The floor, revision, raster or operation state does not permit this change"}
+      }
+    }
+  },
+  "/api/v2/robot/state/map/editor/rooms/restore": {
+    "post": {
+      "tags": ["Robot"],
+      "summary": "Undo a confirmed D103CN room edit or recover an interrupted floor update",
+      "description": "Normal undo reverses the committed cell assignments against the current native map. Recovery from an incomplete apply can require restoring the full pre-edit floor snapshot.",
+      "requestBody": {
+        "required": true,
+        "content": {"application/json": {"schema": {
+          "type": "object", "required": ["floorId", "operationId"],
+          "properties": {"floorId": {"type": "integer", "minimum": 0, "maximum": 999999}, "operationId": {"type": "string", "format": "uuid"}}
+        }}}
+      },
+      "responses": {
+        "202": {"description": "Undo or recovery accepted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/D103CNNativeRoomOperation"}}}},
+        "400": {"description": "Invalid restore request"},
+        "409": {"description": "Operation or selected native floor no longer matches"}
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "D103CNNativeRoomOperation": {
+        "type": "object",
+        "required": ["available", "phase", "floorId", "roomIds", "message", "operationId", "canRollback"],
+        "properties": {
+          "available": {"type": "boolean"},
+          "phase": {"type": "string", "enum": ["idle", "applying", "confirmed", "failed", "restoring", "restored", "needs_recovery"]},
+          "floorId": {"type": "integer", "nullable": true},
+          "roomIds": {"type": "array", "items": {"type": "string"}},
+          "message": {"type": "string"},
+          "operationId": {"type": "string", "format": "uuid", "nullable": true},
+          "canRollback": {"type": "boolean"}
+        }
+      }
+    }
+  },
   "/api/v2/robot/properties": {
     "get": {
       "tags": [

@@ -164,6 +164,16 @@ function sameDoor(a, b, tolerance) {
     return (near(0, 0) && near(2, 2)) || (near(0, 2) && near(2, 0));
 }
 
+function survivingCells(cells, current) {
+    const retained = new Map(cells);
+    for (const [index, [baseline, target]] of cells) {
+        if (current.raster[index] !== baseline || (target >= ROOM_OFFSET && !current.rooms.has(target))) {
+            retained.delete(index);
+        }
+    }
+    return retained;
+}
+
 class D103CNMapEditor {
     constructor(directory = DIRECTORY, nativeData = "/data") {
         this.directory = directory;
@@ -209,12 +219,7 @@ class D103CNMapEditor {
                     "SDK map geometry does not match the selected native floor", 409);
             }
             if (this.data.cells.size && current.raster !== previous?.raster) {
-                const retained = new Map(this.data.cells);
-                for (const [index, [baseline, target]] of this.data.cells) {
-                    if (current.raster[index] !== baseline || (target >= ROOM_OFFSET && !current.rooms.has(target))) {
-                        retained.delete(index);
-                    }
-                }
+                const retained = survivingCells(this.data.cells, current);
                 if (retained.size !== this.data.cells.size) {
                     this.save({...this.data, cells: retained});
                 }
@@ -307,6 +312,40 @@ class D103CNMapEditor {
         const reference = this.reference.get(floorId);
         requireValue(reference.identity === this.current.identity && reference.matches(map, this.current.raster, this.current.width),
             "Native floor geometry changed. Reload before saving.", 409);
+    }
+
+    // Called only after the restore transaction verified the native floor.
+    // Normal floor switches and deletion/recreation never inherit another map's edits.
+    inheritRestoredFloor(map, oldIdentity) {
+        const snapshot = this.describe(map);
+        this.requireRevision(map, snapshot.floorId, snapshot.revision);
+        requireValue(typeof oldIdentity === "string" && /^(0|[1-9]\d{0,5})-\d{1,20}$/.test(oldIdentity) &&
+            oldIdentity.split("-")[0] === String(snapshot.floorId), "Previous floor identity does not match this floor", 409);
+        const {identity, width, height} = this.current;
+        if (oldIdentity === identity) {
+            return;
+        }
+        const old = this.load(path.join(this.directory, oldIdentity + ".json"), width, height, map.size);
+        const cells = survivingCells(old.cells, this.current);
+        // Read the target again. A retry after a completed migration is harmless;
+        // independent owner edits (including an explicit deletion) win.
+        const target = this.load(this.file, width, height, map.size);
+        const identical = target.cells.size === cells.size &&
+            [...cells].every(([index, pair]) => {
+                const actual = target.cells.get(index);
+                return actual && actual[0] === pair[0] && actual[1] === pair[1];
+            }) && JSON.stringify(target.doors) === JSON.stringify(old.doors);
+        if (identical) {
+            if (this.data.revision !== target.revision) {
+                this.data = target;
+                this.render();
+            }
+            return;
+        }
+        requireValue(target.revision === "0" && !target.cells.size && !target.doors.length,
+            "Restored floor already has separate owner edits; refusing to overwrite them", 409);
+        this.save({...target, cells: cells, doors: old.doors});
+        this.render();
     }
 
     update(map, body) {

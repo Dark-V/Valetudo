@@ -3,9 +3,10 @@ import type {RawMapData} from "../../api/RawMapData";
 export type Cell = {x: number; y: number};
 export type Run = [x: number, y: number, length: number, value: string];
 export type Door = {id: string; state: "open" | "closed" | "unknown"; points: [number, number, number, number]};
+export type Wall = [number, number, number, number]; // endpoints in firmware map cm
 export type Snapshot = {floorId: number; revision: string; pixelSize: number; doors: Door[];
     rooms: Array<{id: string; name: string}>; editedCells: number};
-export type Edit = {runs: Run[]} | {doors: Door[]};
+export type Edit = {runs: Run[]; nativeRoom: boolean} | {doors: Door[]} | {walls: Wall[]};
 export const maxCells = 65536;
 export const manualDoorColor = "#66daf5";
 const roomColors = ["#167d80", "#829f3d", "#c27d36", "#926baf", "#527ab7", "#b05762", "#479695"];
@@ -90,6 +91,12 @@ export function latestDoors(edits: Edit[], original: Door[]): Door[] {
         }
     }
     return original;
+}
+
+export function sameWalls(a: Wall[], b: Wall[]): boolean {
+    const keys = (walls: Wall[]) => walls.map(([x,y,endX,endY]) =>
+        (x < endX || (x === endX && y <= endY) ? [x,y,endX,endY] : [endX,endY,x,y]).join(",")).sort();
+    return a.length === b.length && keys(a).join(";") === keys(b).join(";");
 }
 
 export function runPath(runs: Run[]): string {

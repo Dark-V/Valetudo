@@ -86,7 +86,8 @@ closed/open transition and fresh physical-state reporting remain unverified.
   accepts `dsr`/`dsrid` for a straight split and `msr` for a merge. A native split
   on this firmware changed the room IDs and areas while leaving the SLAM grid
   byte-for-byte intact. An arbitrary room polygon or pixel-writing action has
-  not been identified.
+  not been identified. The room brush uses the separate factory backup/restore
+  service to update the saved segmentation for existing traversable cells.
 - **Barriers and thresholds.** The stock `vw` command sets navigation restrictions,
   including virtual walls. `vws` is a separate threshold-setting command. Neither
   edits the physical walls in the SLAM grid.
@@ -101,7 +102,8 @@ closed/open transition and fresh physical-state reporting remain unverified.
   ProbabilityGrid (`fine_large.bin`, 25 mm cells), five derived PNGs, room
   adjacency, door geometry and the floor's `.dat2` state. Replacing a PNG does
   not update that grid or keep the other files in sync. There is no validated
-  native raster-write procedure for this build.
+  native occupancy-write procedure for this build. The room brush changes
+  room membership on mapped free space and preserves the SLAM grid.
 
 The editor validates the displayed floor against the selected floor's saved
 room raster (`last_app_map` → `rism` in its `.dat2`). A captured SDK frame
