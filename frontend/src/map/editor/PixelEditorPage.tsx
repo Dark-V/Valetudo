@@ -89,9 +89,9 @@ function unavailablePath(layers: RawMapLayer[]) {
     return lines.join("");
 }
 
-function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoomId}: {
+function Editor({data: {map, state}, generation, reload, refreshing, savedNotice, initialRoomId}: {
     data: EditorData; reload: (message?: string, roomId?: string) => void; refreshing: boolean;
-    savedNotice: string; initialRoomId?: string
+    generation: number; savedNotice: string; initialRoomId?: string
 }) {
     const firstRoom = state.rooms.find(r => r.id === initialRoomId)?.id ?? state.rooms[0]?.id;
     const [tool, setTool] = React.useState<Tool>(firstRoom ? "brush" : "pan");
@@ -132,9 +132,11 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     const editingWalls = tool === "navigationWall" || !!wallChange;
     const nativeBrush = nativeTarget && (tool === "brush" || tool === "rectangle" || roomDraft);
     const layerSource = nativeBrush ? roomEndpoint+"/layers" : editingWalls && state.editedCells > 0 ? endpoint+"/native" : null;
-    const [draftBasis, setDraftBasis] = React.useState<string>();
+    const [draftBackdrop, setDraftBackdrop] = React.useState<NativeLayers>();
+    const draftBasis = draftBackdrop?.nativeRevision;
     const [expiredBasis, setExpiredBasis] = React.useState(false);
-    const native = useQuery({queryKey: ["native_map_editor_backdrop",layerSource,state.floorId,state.revision],
+    // A native restore can change occupancy without changing the SDK floor revision.
+    const native = useQuery({queryKey: ["native_map_editor_backdrop",layerSource,state.floorId,state.revision,generation],
         enabled: !!layerSource, staleTime: Infinity, gcTime: 0, retry: false,
         queryFn: async () => {
             const {data} = await valetudoAPI.get<NativeLayers>(layerSource!);
@@ -153,8 +155,10 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     const basis = native.data?.nativeRevision;
     const mapGeometryReady = (!layerSource || (!!native.data && !native.isError)) &&
         (!nativeBrush || (!expiredBasis && (!roomDraft || basis === draftBasis)));
+    const staleGeometry = native.isError || expiredBasis || (roomDraft && !!basis && basis !== draftBasis);
+    const backdrop = roomDraft ? draftBackdrop : native.data;
     const drawingMap = React.useMemo(() => layerSource ?
-        {...map, layers: mapGeometryReady ? native.data?.layers ?? [] : []} : map, [map,layerSource,mapGeometryReady,native.data]);
+        {...map, layers: backdrop?.layers ?? []} : map, [map,layerSource,backdrop]);
     const paths = React.useMemo(() => layerPaths(drawingMap), [drawingMap]);
     const unavailable = React.useMemo(() => nativeBrush ? unavailablePath(drawingMap.layers) : "", [drawingMap,nativeBrush]);
     const {data: robotStatus} = useRobotStatusQuery();
@@ -164,6 +168,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
     const rooms = paths.filter(p => p.layer.type === "segment");
     const room = rooms.find(r => r.value === paint)?.layer;
     const roomId = paint.startsWith("room:") ? paint.slice(5) : undefined;
+    const requestReload = () => edits.length ? setConfirmReload(true) : reload("",roomId);
     const roomName = state.rooms.find(r => r.id === roomId)?.name || roomId;
     const roomVerified = roomOp?.phase === "confirmed" && roomOp.floorId === state.floorId &&
         !!roomId && roomOp.roomIds.map(String).includes(roomId);
@@ -264,7 +269,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
             }
             if (finish) {
                 if (nativeTarget && !roomDraft) {
-                    setDraftBasis(basis);
+                    setDraftBackdrop(native.data);
                 }
                 append({runs: runs, nativeRoom: nativeTarget});
             } else {
@@ -517,7 +522,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
                 <Button size="small" aria-label="Zoom in" onClick={() => zoom(.65)}>Zoom +</Button>
                 <Button size="small" aria-label="Zoom out" onClick={() => zoom(1/.65)}>Zoom −</Button>
                 <Button size="small" disabled={!mapGeometryReady} onClick={() => setView(fitView(drawingMap))}>Fit</Button>
-                <Button size="small" disabled={busy} onClick={() => edits.length ? setConfirmReload(true) : reload()}>Reload floor</Button>
+                <Button size="small" disabled={busy} onClick={requestReload}>Reload floor</Button>
                 {edits.length > 0 && <Button size="small" disabled={busy} onClick={() => {
                     setEdits([]); setFuture([]); setWarning("");
                 }}>Discard draft</Button>}
@@ -539,9 +544,9 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         {nativeBrush && " Paint across stale obstacles to mark floor."} Scroll to zoom.
         {tool === "rectangle" && preview.length > 0 && ` Selection: ${preview[0][2] * map.pixelSize} × ${preview.length * map.pixelSize} cm.`}
         </Typography>
-        {nativeBrush && !mapGeometryReady && <Alert severity={native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ? "warning" : "info"}>
-            {native.isError || expiredBasis || (roomDraft && basis && basis !== draftBasis) ?
-                "Saved room geometry is unavailable or changed. Reload the floor before drawing." : "Loading the saved navigation area…"}
+        {nativeBrush && !mapGeometryReady && <Alert severity={staleGeometry ? "warning" : "info"}
+            action={staleGeometry && <Button disabled={busy} onClick={requestReload}>Reload floor</Button>}>
+            {staleGeometry ? "Saved room geometry is unavailable or changed. Reload before drawing." : "Loading the saved navigation area…"}
         </Alert>}
         {(nativeBrush || isRunning(roomOp) || roomOp?.canRollback || roomProblem) && <Stack spacing={1}>
             {roomOpQuery.isError && <Alert severity="warning">Native writer status unavailable.
@@ -564,7 +569,7 @@ function Editor({data: {map, state}, reload, refreshing, savedNotice, initialRoo
         </Stack>}
         {warning && <Alert severity="warning">{warning}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
         {confirmReload && <Alert severity="warning">Reload and discard the current draft?
-            <Button onClick={() => reload()}>Reload</Button><Button onClick={() => setConfirmReload(false)}>Keep editing</Button></Alert>}
+            <Button disabled={busy} onClick={() => reload("",roomId)}>Reload</Button><Button onClick={() => setConfirmReload(false)}>Keep editing</Button></Alert>}
         <Box sx={{backgroundColor: "#101317", border: "1px solid #596069", borderRadius: 1}}>
             <svg ref={svg} role="img" aria-label="Editable floor map" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
                 style={{width: "100%", height: "min(55vh, 620px)", minHeight: 240, touchAction: "none", display: "block",
@@ -694,7 +699,7 @@ export default function PixelEditorPage() {
     return <PaperContainer>
         {query.isPending && <Typography>{query.failureCount ? "Waiting for the robot’s localized room map…" : "Loading editor…"}</Typography>}
         {query.isError && <Alert severity="error">{errorMessage(query.error)} <Button onClick={() => reload()}>Retry</Button></Alert>}
-        {query.data && <Editor key={generation} data={query.data} reload={reload} refreshing={query.isFetching}
+        {query.data && <Editor key={generation} data={query.data} generation={generation} reload={reload} refreshing={query.isFetching}
             savedNotice={savedNotice} initialRoomId={initialRoomId}/>}
     </PaperContainer>;
 }
