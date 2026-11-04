@@ -1,6 +1,6 @@
 const crypto = require("crypto");
-const fs = require("fs");
 const FineGrid = require("./D103CNNativeFineGrid");
+const fs = require("fs");
 const MapLayer = require("../../entities/map/MapLayer");
 const ValetudoMap = require("../../entities/map/ValetudoMap");
 

@@ -310,7 +310,7 @@ class D103CNNativeRoomMask {
         }
         /** @type {Array<{x:number,y:number,from:number,to:number,reopen:boolean,
          * before:{obstacle:number,slam:number,contour:number,color:number},
-         * originalIslands?:Object<string,number>,roomFlags?:Object<string,boolean|null>}>} */
+         * originalIslands?:Object<string,number>,roomFlags?:Object<string,boolean|null>,sdkBefore?:number}>} */
         const edits = [];
         const color = image(files[names.color], s.width, s.height, 3);
         for (const [i, to] of desired) {

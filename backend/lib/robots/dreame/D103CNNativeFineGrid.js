@@ -17,7 +17,7 @@ function shape(bounds) {
     const width = x1-x0+1, height = y1-y0+1;
     check(bounds.length === 4 && bounds.every(v => Number.isInteger(v) && v >= 0 && v < 8192) &&
         width > 0 && height > 0 && width*height <= MAX_CELLS, "unsupported bounds");
-    return {x0,y0,x1,y1,width,height};
+    return {x0: x0,y0: y0,x1: x1,y1: y1,width: width,height: height};
 }
 
 function decode(data) {
@@ -42,7 +42,7 @@ function decode(data) {
         }
     }
     check(out === raw.length, "truncated raster");
-    return {...box,raw};
+    return {...box,raw: raw};
 }
 
 function encode(grid, header) {
@@ -84,7 +84,7 @@ function fit(grid, next) {
         const src = ((y-grid.y0)*grid.width+left-grid.x0)*4;
         grid.raw.copy(raw,((y-b.y0)*b.width+left-b.x0)*4,src,src+4*(right-left+1));
     }
-    return {...b,raw};
+    return {...b,raw: raw};
 }
 
 function offset(g,x,y) {
@@ -200,4 +200,4 @@ function correct(bytes, edits, restoring = false) {
     return encode(g,bytes);
 }
 
-module.exports = {decode,needsCheck,capture,matches,correct};
+module.exports = {decode: decode,needsCheck: needsCheck,capture: capture,matches: matches,correct: correct};
